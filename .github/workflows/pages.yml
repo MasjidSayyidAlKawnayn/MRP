@@ -32,8 +32,8 @@ jobs:
 
       - name: Verify Neon Auth URL
         run: |
-          if [ -z "$VITE_NEON_AUTH_URL" ]; then
-            echo "Missing GitHub repository variable: VITE_NEON_AUTH_URL"
+          if [ -z "$VITE_NEON_AUTH_URL" ] && ! grep -q "^VITE_NEON_AUTH_URL=" .env.production; then
+            echo "Missing VITE_NEON_AUTH_URL. Set the GitHub repository variable or provide .env.production."
             exit 1
           fi
         env:
