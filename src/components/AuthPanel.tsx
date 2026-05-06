@@ -54,7 +54,7 @@ function UserSummary() {
   if (isPending) {
     return (
       <div className="border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm text-slate-600">Loading your Google account...</p>
+        <p className="text-sm text-slate-600">Loading your account...</p>
       </div>
     );
   }
@@ -76,10 +76,10 @@ function UserSummary() {
 
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-cedar">
-            Signed in with Google
+            Signed in
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-ink">
-            {name || email || "Google account"}
+            {name || email || "Account"}
           </h2>
           {email ? <p className="mt-1 text-sm text-slate-600">{email}</p> : null}
         </div>
@@ -127,11 +127,10 @@ export function AuthPanel() {
               MRP frontend
             </p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-ink sm:text-5xl">
-              Sign in with Google.
+              Sign in to MRP.
             </h1>
             <p className="mt-5 text-lg leading-8 text-slate-700">
-              After login, this page shows the Google account information
-              returned by Neon Auth.
+              Use your username and password to access your account.
             </p>
           </div>
 
@@ -149,7 +148,7 @@ export function AuthPanel() {
                 MRP frontend
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-ink">
-                Your Google account
+                Your account
               </h1>
             </div>
             <UserButton />

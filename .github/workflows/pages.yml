@@ -30,6 +30,15 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
+      - name: Verify Neon Auth URL
+        run: |
+          if [ -z "$VITE_NEON_AUTH_URL" ]; then
+            echo "Missing GitHub repository variable: VITE_NEON_AUTH_URL"
+            exit 1
+          fi
+        env:
+          VITE_NEON_AUTH_URL: ${{ vars.VITE_NEON_AUTH_URL }}
+
       - name: Build
         run: bun run build
         env:
