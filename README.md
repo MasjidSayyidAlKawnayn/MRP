@@ -29,6 +29,8 @@ bun run preview
 
 The deployment workflow builds `dist` and publishes it with GitHub Pages. The workflow sets `VITE_BASE_PATH` from the repository name so Vite emits correct asset URLs for project pages.
 
+In **Settings -> Pages -> Build and deployment**, set **Source** to **GitHub Actions**. Do not use **Deploy from a branch** with `main` and `/(root)`, because that serves the raw Vite source `index.html` and causes GitHub Pages to request `/src/main.tsx`.
+
 In the GitHub repository settings, enable GitHub Pages from GitHub Actions and add a repository variable:
 
 ```text
