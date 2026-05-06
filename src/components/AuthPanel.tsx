@@ -1,4 +1,5 @@
 import { AuthView, SignedIn, SignedOut, UserButton } from "@neondatabase/neon-js/auth/react/ui";
+import { useEffect, useState } from "react";
 import { authClient } from "../auth/client";
 
 function getStringField(value: unknown, key: string) {
@@ -106,6 +107,17 @@ function UserSummary() {
 }
 
 export function AuthPanel() {
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    function syncPathname() {
+      setPathname(window.location.pathname);
+    }
+
+    window.addEventListener("popstate", syncPathname);
+    return () => window.removeEventListener("popstate", syncPathname);
+  }, []);
+
   return (
     <>
       <SignedOut>
@@ -124,7 +136,7 @@ export function AuthPanel() {
           </div>
 
           <div className="mt-8 border border-slate-200 bg-white p-5 shadow-sm">
-            <AuthView />
+            <AuthView pathname={pathname} redirectTo={import.meta.env.BASE_URL} />
           </div>
         </section>
       </SignedOut>
