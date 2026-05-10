@@ -15,7 +15,8 @@ export default {
       },
       fontFamily: {
         sans: [
-          "Inter",
+          "Cairo Variable",
+          "Cairo",
           "ui-sans-serif",
           "system-ui",
           "Segoe UI",

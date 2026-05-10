@@ -1,5 +1,27 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
+  BookOpen,
+  CalendarCheck,
+  CheckCircle2,
+  Database,
+  Eye,
+  FileText,
+  GraduationCap,
+  Layers3,
+  ListFilter,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Trash2,
+  UserRound,
+  UsersRound,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
   createRow,
   formatValue,
   getEditableFields,
@@ -16,6 +38,7 @@ import {
   getEntityDefinitions,
   type EntityDefinition,
   type EntityId,
+  type EntityKey,
   type FieldDefinition,
   type SchemaName,
 } from "../crud/entities";
@@ -23,7 +46,55 @@ import {
 type ViewMode = "list" | "create" | "detail" | "edit";
 type RelationOptions = Partial<Record<EntityId, CrudRow[]>>;
 
-const allowedApplicationSchemas = new Set<SchemaName>(["mqs", "wartaqi"]);
+const ui = {
+  crudPages: "\u0623\u0642\u0633\u0627\u0645 \u0627\u0644\u0645\u0646\u0635\u0629",
+  adminCrud: "\u0644\u0648\u062D\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A",
+  schema: "\u0627\u0644\u0645\u062E\u0637\u0637",
+  records: "\u0627\u0644\u0633\u062C\u0644\u0627\u062A",
+  totalRecords: "\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0633\u062C\u0644\u0627\u062A",
+  visibleRecords: "\u0627\u0644\u0633\u062C\u0644\u0627\u062A \u0627\u0644\u0638\u0627\u0647\u0631\u0629",
+  tableFields: "\u0623\u0639\u0645\u062F\u0629 \u0627\u0644\u062C\u062F\u0648\u0644",
+  relations: "\u0631\u0648\u0627\u0628\u0637 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A",
+  add: "\u0625\u0636\u0627\u0641\u0629",
+  create: "\u0625\u0646\u0634\u0627\u0621",
+  edit: "\u062A\u0639\u062F\u064A\u0644",
+  view: "\u0639\u0631\u0636",
+  delete: "\u062D\u0630\u0641",
+  refresh: "\u062A\u062D\u062F\u064A\u062B",
+  save: "\u062D\u0641\u0638",
+  saving: "\u062C\u0627\u0631 \u0627\u0644\u062D\u0641\u0638...",
+  cancel: "\u0625\u0644\u063A\u0627\u0621",
+  none: "\u0628\u062F\u0648\u0646",
+  select: "\u0627\u062E\u062A\u0631",
+  yes: "\u0646\u0639\u0645",
+  no: "\u0644\u0627",
+  loading: "\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0633\u062C\u0644\u0627\u062A...",
+  noRecords: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0633\u062C\u0644\u0627\u062A \u0628\u0639\u062F.",
+  noMatches: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0646\u062A\u0627\u0626\u062C \u062A\u0637\u0627\u0628\u0642 \u0627\u0644\u0628\u062D\u062B.",
+  search: "\u0628\u062D\u062B",
+  actions: "\u0627\u0644\u0625\u062C\u0631\u0627\u0621\u0627\u062A",
+  showing: "\u0627\u0644\u0645\u0639\u0631\u0648\u0636",
+  from: "\u0645\u0646",
+  createError: "\u062A\u0639\u0630\u0631 \u062D\u0641\u0638 \u0647\u0630\u0627 \u0627\u0644\u0633\u062C\u0644.",
+  loadError: "\u062A\u0639\u0630\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0633\u062C\u0644\u0627\u062A.",
+  invalidId: "\u0647\u0630\u0627 \u0627\u0644\u0633\u062C\u0644 \u0644\u0627 \u064A\u062D\u0645\u0644 \u0645\u0639\u0631\u0641\u0627 \u0635\u0627\u0644\u062D\u0627.",
+  confirmDelete: "\u061F\u0647\u0644 \u062A\u0631\u064A\u062F \u062D\u0630\u0641",
+  hideRecord: "\u0633\u064A\u062A\u0645 \u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0633\u062C\u0644 \u0645\u0646 \u0627\u0644\u062A\u0637\u0628\u064A\u0642.",
+};
+
+const entityIcons: Record<EntityKey, LucideIcon> = {
+  students: GraduationCap,
+  teachers: UserRound,
+  groups: UsersRound,
+  assignments: FileText,
+  pages: BookOpen,
+  attendanceSessions: CalendarCheck,
+  attendanceRecords: CheckCircle2,
+};
+
+function getEntityKey(entityId: EntityId) {
+  return entityId.split(".").at(-1) as EntityKey;
+}
 
 function parseInputValue(field: FieldDefinition, value: string): CrudValue {
   if (field.type === "boolean") {
@@ -115,7 +186,7 @@ function formatFieldValue(
     const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? value
-      : new Intl.DateTimeFormat(undefined, {
+      : new Intl.DateTimeFormat("ar", {
           dateStyle: "medium",
           timeStyle: "short",
         }).format(date);
@@ -125,9 +196,7 @@ function formatFieldValue(
     const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? value
-      : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-          date,
-        );
+      : new Intl.DateTimeFormat("ar", { dateStyle: "medium" }).format(date);
   }
 
   return getRelationLabel(field, value, relationOptions, entityDefinitions);
@@ -143,31 +212,42 @@ function EntityNav({
   onSelect: (entityId: EntityId) => void;
 }) {
   return (
-    <aside className="border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        CRUD pages
-      </h2>
-      <div className="mt-3 grid gap-1">
+    <aside className="rounded-[2rem] border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur">
+      <h2 className="px-2 text-xs font-bold text-slate-500">{ui.crudPages}</h2>
+      <div className="mt-4 grid gap-2">
         {entityDefinitions
           .filter((entity) => entity.showInNav !== false)
-          .map((entity) => (
-            <button
-              className={`px-3 py-2 text-left text-sm font-medium transition ${
-                entity.id === activeEntityId
-                  ? "bg-cedar text-white"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-              key={entity.id}
-              onClick={() => onSelect(entity.id)}
-              type="button"
-            >
-              {entity.label}
-            </button>
-          ))}
+          .map((entity) => {
+            const Icon = entityIcons[getEntityKey(entity.id)] ?? Database;
+
+            return (
+              <button
+                className={`flex min-h-14 items-center gap-3 rounded-2xl px-3 py-2 text-right text-sm font-bold transition ${
+                  entity.id === activeEntityId
+                    ? "bg-cedar text-white shadow-lg shadow-cedar/25"
+                    : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
+                }`}
+                key={entity.id}
+                onClick={() => onSelect(entity.id)}
+                type="button"
+              >
+                <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block truncate">{entity.label}</span>
+                  <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                    {entity.singularLabel}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
       </div>
     </aside>
   );
 }
+
+const inputClass =
+  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-ink shadow-sm transition placeholder:text-slate-400 focus:border-cedar";
 
 function EntityForm({
   entity,
@@ -211,11 +291,7 @@ function EntityForm({
     try {
       await onSubmit(values);
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Could not save this record.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
     } finally {
       setIsSaving(false);
     }
@@ -229,13 +305,13 @@ function EntityForm({
             className={field.type === "textarea" ? "md:col-span-2" : undefined}
             key={field.key}
           >
-            <span className="text-sm font-medium text-slate-700">
+            <span className="text-sm font-bold text-slate-700">
               {field.label}
             </span>
 
             {field.relation ? (
               <select
-                className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"
+                className={inputClass}
                 onChange={(event) =>
                   setValues((current) => ({
                     ...current,
@@ -246,21 +322,21 @@ function EntityForm({
                 value={toInputValue(values[field.key] ?? null, field)}
               >
                 <option value="">
-                  {field.required ? `Select ${field.label}` : "None"}
+                  {field.required ? `${ui.select} ${field.label}` : ui.none}
                 </option>
                 {(relationOptions[field.relation.entityId] ?? []).map(
                   (option) => {
                     const optionId = option.id;
+                    const relationEntity = findEntityDefinition(
+                      field.relation!.entityId,
+                      entityDefinitions,
+                    );
 
                     return (
                       <option key={String(optionId)} value={String(optionId)}>
-                        {getRowLabel(
-                          findEntityDefinition(
-                            field.relation!.entityId,
-                            entityDefinitions,
-                          )!,
-                          option,
-                        )}
+                        {relationEntity
+                          ? getRowLabel(relationEntity, option)
+                          : formatValue(optionId)}
                       </option>
                     );
                   },
@@ -268,7 +344,7 @@ function EntityForm({
               </select>
             ) : field.type === "textarea" ? (
               <textarea
-                className="mt-1 min-h-28 w-full border border-slate-300 px-3 py-2 text-sm"
+                className={`${inputClass} min-h-32 resize-y leading-7`}
                 onChange={(event) =>
                   setValues((current) => ({
                     ...current,
@@ -280,7 +356,7 @@ function EntityForm({
               />
             ) : field.type === "boolean" ? (
               <select
-                className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"
+                className={inputClass}
                 onChange={(event) =>
                   setValues((current) => ({
                     ...current,
@@ -290,12 +366,12 @@ function EntityForm({
                 required={field.required}
                 value={toInputValue(values[field.key] ?? false, field)}
               >
-                <option value="true">Yes</option>
-                <option value="false">No</option>
+                <option value="true">{ui.yes}</option>
+                <option value="false">{ui.no}</option>
               </select>
             ) : (
               <input
-                className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm"
+                className={inputClass}
                 onChange={(event) =>
                   setValues((current) => ({
                     ...current,
@@ -318,7 +394,7 @@ function EntityForm({
               />
             )}
             {field.helpText ? (
-              <span className="mt-1 block text-xs leading-5 text-slate-500">
+              <span className="mt-2 block text-xs leading-5 text-slate-500">
                 {field.helpText}
               </span>
             ) : null}
@@ -327,25 +403,31 @@ function EntityForm({
       </div>
 
       {error ? (
-        <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </p>
       ) : null}
 
       <div className="flex flex-wrap gap-3">
         <button
-          className="bg-cedar px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60"
           disabled={isSaving}
           type="submit"
         >
-          {isSaving ? "Saving..." : "Save"}
+          {isSaving ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Save className="h-4 w-4" aria-hidden="true" />
+          )}
+          {isSaving ? ui.saving : ui.save}
         </button>
         <button
-          className="border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
           onClick={onCancel}
           type="button"
         >
-          Cancel
+          <X className="h-4 w-4" aria-hidden="true" />
+          {ui.cancel}
         </button>
       </div>
     </form>
@@ -366,27 +448,29 @@ function DetailView({
   relationOptions: RelationOptions;
 }) {
   return (
-    <div className="border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl shadow-cedar/5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold text-ink">
-          {getRowLabel(entity, row)}
-        </h2>
+        <div>
+          <p className="text-xs font-bold text-cedar">{ui.view}</p>
+          <h2 className="mt-1 text-2xl font-bold text-ink">
+            {getRowLabel(entity, row)}
+          </h2>
+        </div>
         <button
-          className="bg-ink px-4 py-2 text-sm font-semibold text-white"
+          className="inline-flex items-center gap-2 rounded-2xl bg-ink px-4 py-2 text-sm font-bold text-white transition hover:bg-palm"
           onClick={onEdit}
           type="button"
         >
-          Edit
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          {ui.edit}
         </button>
       </div>
 
       <dl className="mt-5 grid gap-3 md:grid-cols-2">
         {entity.fields.map((field) => (
-          <div className="border-b border-slate-200 pb-3" key={field.key}>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {field.label}
-            </dt>
-            <dd className="mt-1 break-words text-sm text-ink">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={field.key}>
+            <dt className="text-xs font-bold text-slate-500">{field.label}</dt>
+            <dd className="mt-2 break-words text-sm font-semibold text-ink">
               {formatFieldValue(
                 field,
                 row[field.key],
@@ -411,7 +495,7 @@ function getConfiguredSchemas() {
   const schemas = configuredSchemas
     .split(",")
     .map((schema) => schema.trim())
-    .filter((schema) => allowedApplicationSchemas.has(schema));
+    .filter(Boolean);
 
   return schemas.length ? schemas : ["mqs"];
 }
@@ -426,10 +510,10 @@ function SchemaPicker({
   onSelect: (schema: SchemaName) => void;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-slate-700 sm:w-64">
-      <span>Schema</span>
+    <label className="flex min-w-48 flex-col gap-2 text-sm font-bold text-slate-700">
+      <span>{ui.schema}</span>
       <select
-        className="border border-slate-300 bg-white px-3 py-2 text-sm"
+        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
         onChange={(event) => onSelect(event.target.value)}
         value={activeSchema}
       >
@@ -440,6 +524,30 @@ function SchemaPicker({
         ))}
       </select>
     </label>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cedar/10 text-cedar">
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-xs font-bold text-slate-500">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -483,11 +591,7 @@ export function CrudDashboard() {
     try {
       setRows(await listRows(entity));
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Could not load records.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : ui.loadError);
     } finally {
       setIsLoading(false);
     }
@@ -539,9 +643,7 @@ export function CrudDashboard() {
 
   async function handleSoftDelete(row: CrudRow) {
     const label = getRowLabel(activeEntity, row);
-    const confirmed = window.confirm(
-      `Delete ${label}? This hides the record from the app.`,
-    );
+    const confirmed = window.confirm(`${ui.confirmDelete} ${label}؟ ${ui.hideRecord}`);
 
     if (!confirmed) {
       return;
@@ -550,7 +652,7 @@ export function CrudDashboard() {
     const id = Number(row.id);
 
     if (!Number.isFinite(id)) {
-      setError("This record does not have a valid ID.");
+      setError(ui.invalidId);
       return;
     }
 
@@ -598,8 +700,10 @@ export function CrudDashboard() {
     await refreshRows();
   }
 
+  const ActiveIcon = entityIcons[getEntityKey(activeEntity.id)] ?? Database;
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
       <EntityNav
         activeEntityId={activeEntity.id}
         entityDefinitions={entityDefinitions}
@@ -607,47 +711,68 @@ export function CrudDashboard() {
       />
 
       <section className="min-w-0 space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-cedar">
-              Admin CRUD
-            </p>
-            <h1 className="mt-1 text-3xl font-semibold text-ink">
-              {activeEntity.label}
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              {activeEntity.description}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <SchemaPicker
-              activeSchema={activeSchema}
-              onSelect={setActiveSchema}
-              schemas={schemas}
-            />
-            <button
-              className="bg-cedar px-4 py-2 text-sm font-semibold text-white"
-              onClick={() => {
-                setSelectedRow(null);
-                setMode("create");
-              }}
-              type="button"
-            >
-              New {activeEntity.singularLabel}
-            </button>
+        <div className="rounded-[2rem] border border-white/70 bg-white/85 p-5 shadow-xl shadow-cedar/5 backdrop-blur">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 gap-4">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/25">
+                <ActiveIcon className="h-7 w-7" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-cedar">{ui.adminCrud}</p>
+                <h1 className="mt-1 text-3xl font-bold text-ink">
+                  {activeEntity.label}
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+                  {activeEntity.description}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <SchemaPicker
+                activeSchema={activeSchema}
+                onSelect={setActiveSchema}
+                schemas={schemas}
+              />
+              <button
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                onClick={() => void refreshRows()}
+                type="button"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                {ui.refresh}
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+                onClick={() => {
+                  setSelectedRow(null);
+                  setMode("create");
+                }}
+                type="button"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {ui.add} {activeEntity.singularLabel}
+              </button>
+            </div>
           </div>
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard icon={Database} label={ui.totalRecords} value={rows.length} />
+          <StatCard icon={ListFilter} label={ui.visibleRecords} value={filteredRows.length} />
+          <StatCard icon={Layers3} label={ui.tableFields} value={activeEntity.listFields.length} />
+          <StatCard icon={RefreshCw} label={ui.relations} value={relationEntityIds.length} />
+        </div>
+
         {error ? (
-          <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </p>
         ) : null}
 
         {mode === "create" ? (
-          <div className="border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-xl font-semibold text-ink">
-              Create {activeEntity.singularLabel}
+          <div className="rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl shadow-cedar/5">
+            <h2 className="mb-5 text-xl font-bold text-ink">
+              {ui.create} {activeEntity.singularLabel}
             </h2>
             <EntityForm
               entity={activeEntity}
@@ -661,9 +786,9 @@ export function CrudDashboard() {
         ) : null}
 
         {mode === "edit" && selectedRow ? (
-          <div className="border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-5 text-xl font-semibold text-ink">
-              Edit {getRowLabel(activeEntity, selectedRow)}
+          <div className="rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl shadow-cedar/5">
+            <h2 className="mb-5 text-xl font-bold text-ink">
+              {ui.edit} {getRowLabel(activeEntity, selectedRow)}
             </h2>
             <EntityForm
               entity={activeEntity}
@@ -687,63 +812,55 @@ export function CrudDashboard() {
           />
         ) : null}
 
-        <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4">
             <div>
-              <h2 className="text-base font-semibold text-ink">Records</h2>
+              <h2 className="text-lg font-bold text-ink">{ui.records}</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Showing {filteredRows.length} of {rows.length}
+                {ui.showing} {filteredRows.length} {ui.from} {rows.length}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <label className="relative block w-full sm:w-72">
+              <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
-                className="w-56 max-w-full border border-slate-300 px-3 py-1.5 text-sm"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pe-4 ps-10 text-sm shadow-sm"
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder={`Search ${activeEntity.label.toLowerCase()}`}
+                placeholder={`${ui.search} ${activeEntity.label}`}
                 type="search"
                 value={searchTerm}
               />
-              <button
-                className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700"
-                onClick={() => void refreshRows()}
-                type="button"
-              >
-                Refresh
-              </button>
-            </div>
+            </label>
           </div>
 
           {isLoading ? (
-            <p className="p-4 text-sm text-slate-600">Loading records...</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-sm text-slate-600">No records found.</p>
-          ) : filteredRows.length === 0 ? (
-            <p className="p-4 text-sm text-slate-600">
-              No records match your search.
+            <p className="flex items-center gap-2 p-5 text-sm text-slate-600">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              {ui.loading}
             </p>
+          ) : rows.length === 0 ? (
+            <p className="p-5 text-sm text-slate-600">{ui.noRecords}</p>
+          ) : filteredRows.length === 0 ? (
+            <p className="p-5 text-sm text-slate-600">{ui.noMatches}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-                <thead className="bg-slate-50">
+              <table className="min-w-full divide-y divide-slate-200 text-right text-sm">
+                <thead className="bg-mist/70">
                   <tr>
                     {activeEntity.listFields.map((key) => (
-                      <th
-                        className="whitespace-nowrap px-4 py-3 font-semibold text-slate-600"
-                        key={key}
-                      >
+                      <th className="whitespace-nowrap px-5 py-4 font-bold text-slate-600" key={key}>
                         {getField(activeEntity, key)?.label ?? key}
                       </th>
                     ))}
-                    <th className="px-4 py-3 font-semibold text-slate-600">
-                      Actions
+                    <th className="px-5 py-4 font-bold text-slate-600">
+                      {ui.actions}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRows.map((row) => (
-                    <tr key={String(row.id)}>
+                    <tr className="transition hover:bg-cedar/5" key={String(row.id)}>
                       {activeEntity.listFields.map((key) => (
-                        <td className="whitespace-nowrap px-4 py-3" key={key}>
+                        <td className="max-w-[18rem] truncate whitespace-nowrap px-5 py-4 text-slate-700" key={key}>
                           {formatFieldValue(
                             getField(activeEntity, key),
                             row[key],
@@ -752,35 +869,17 @@ export function CrudDashboard() {
                           )}
                         </td>
                       ))}
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <div className="flex gap-2">
-                          <button
-                            className="text-sm font-semibold text-cedar"
-                            onClick={() => {
-                              setSelectedRow(row);
-                              setMode("detail");
-                            }}
-                            type="button"
-                          >
-                            View
-                          </button>
-                          <button
-                            className="text-sm font-semibold text-ink"
-                            onClick={() => {
-                              setSelectedRow(row);
-                              setMode("edit");
-                            }}
-                            type="button"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="text-sm font-semibold text-red-700"
-                            onClick={() => void handleSoftDelete(row)}
-                            type="button"
-                          >
-                            Delete
-                          </button>
+                      <td className="whitespace-nowrap px-5 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton icon={Eye} label={ui.view} onClick={() => {
+                            setSelectedRow(row);
+                            setMode("detail");
+                          }} />
+                          <ActionButton icon={Pencil} label={ui.edit} onClick={() => {
+                            setSelectedRow(row);
+                            setMode("edit");
+                          }} />
+                          <ActionButton danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
                         </div>
                       </td>
                     </tr>
@@ -792,5 +891,32 @@ export function CrudDashboard() {
         </div>
       </section>
     </div>
+  );
+}
+
+function ActionButton({
+  danger,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  danger?: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
+        danger
+          ? "bg-red-50 text-red-700 hover:bg-red-100"
+          : "bg-slate-100 text-slate-700 hover:bg-cedar/10 hover:text-cedar"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      {label}
+    </button>
   );
 }

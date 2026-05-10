@@ -88,11 +88,11 @@ export function getEditableFields(
 
 export function formatValue(value: CrudValue | undefined) {
   if (value === null || value === undefined || value === "") {
-    return "Not set";
+    return "\u063A\u064A\u0631 \u0645\u062D\u062F\u062F";
   }
 
   if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
+    return value ? "\u0646\u0639\u0645" : "\u0644\u0627";
   }
 
   return String(value);
@@ -101,7 +101,7 @@ export function formatValue(value: CrudValue | undefined) {
 export function getRowLabel(entity: EntityDefinition, row: CrudRow) {
   const label = entity.displayFields
     .map((key) => formatValue(row[key]))
-    .filter((value) => value !== "Not set")
+    .filter((value) => value !== "\u063A\u064A\u0631 \u0645\u062D\u062F\u062F")
     .join(" ");
 
   return label || `${entity.singularLabel} #${formatValue(row.id)}`;
