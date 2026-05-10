@@ -95,10 +95,10 @@ function UserSummary() {
   }
 
   return (
-    <section className="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-xl shadow-cedar/5 backdrop-blur">
+    <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
       <div className="mb-6">
         <p className="text-sm font-bold text-cedar">{text.profile}</p>
-        <h2 className="mt-1 text-3xl font-bold text-ink">
+        <h2 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
           {text.profileTitle}
         </h2>
         <p className="mt-2 text-sm leading-7 text-slate-600">
@@ -107,33 +107,33 @@ function UserSummary() {
       </div>
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           {image ? (
             <img
               alt=""
-              className="h-20 w-20 rounded-3xl border border-slate-200 object-cover"
+              className="h-16 w-16 rounded-2xl border border-slate-200 object-cover sm:h-20 sm:w-20 sm:rounded-3xl"
               src={image}
             />
           ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-cedar text-2xl font-bold text-white shadow-lg shadow-cedar/25">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-cedar text-xl font-bold text-white shadow-lg shadow-cedar/25 sm:h-20 sm:w-20 sm:rounded-3xl sm:text-2xl">
               {(name || email || text.account).slice(0, 1).toUpperCase()}
             </div>
           )}
 
-          <div>
-            <p className="inline-flex items-center gap-2 rounded-full bg-cedar/10 px-3 py-1 text-xs font-bold text-cedar">
+          <div className="min-w-0">
+            <p className="inline-flex max-w-full items-center gap-2 rounded-full bg-cedar/10 px-3 py-1 text-xs font-bold text-cedar">
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              {text.signedIn}
+              <span className="truncate">{text.signedIn}</span>
             </p>
-            <h2 className="mt-3 text-2xl font-bold text-ink">
+            <h2 className="mt-3 truncate text-xl font-bold text-ink sm:text-2xl">
               {name || email || text.account}
             </h2>
-            {email ? <p className="mt-1 text-sm text-slate-600">{email}</p> : null}
+            {email ? <p className="mt-1 break-all text-sm text-slate-600">{email}</p> : null}
           </div>
         </div>
       </div>
 
-      <dl className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <dl className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <InfoRow icon={<UserRound className="h-4 w-4" />} label={text.name} value={name} />
         <InfoRow icon={<Mail className="h-4 w-4" />} label={text.email} value={email} />
         <InfoRow icon={<ShieldCheck className="h-4 w-4" />} label={text.admin} value={hasAdminUiAccess ? text.yes : text.no} />
@@ -154,13 +154,13 @@ function AccountControls() {
   const { email, isSigningOut, name, signOut, signOutError } = useAuth();
 
   return (
-    <div className="flex flex-col items-start gap-3 sm:items-end">
-      <div className="text-right">
+    <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end">
+      <div className="min-w-0 text-right">
         <p className="text-sm font-bold text-ink">{name || text.account}</p>
-        {email ? <p className="text-xs text-slate-600">{email}</p> : null}
+        {email ? <p className="break-all text-xs text-slate-600">{email}</p> : null}
       </div>
       <button
-        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-cedar/30 hover:bg-cedar/5 disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-cedar/30 hover:bg-cedar/5 disabled:opacity-60 sm:w-auto sm:justify-start sm:py-2"
         disabled={isSigningOut}
         onClick={() => void signOut().catch(() => undefined)}
         type="button"
@@ -194,10 +194,10 @@ function WorkspaceTabs({
   ];
 
   return (
-    <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-1 shadow-sm">
+    <div className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white/80 p-1 shadow-sm sm:flex sm:w-auto sm:flex-wrap sm:gap-2">
       {tabs.map(({ icon: Icon, label, page }) => (
         <button
-          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition ${
+          className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition sm:px-4 sm:py-2 ${
             activePage === page
               ? "bg-cedar text-white shadow-md shadow-cedar/20"
               : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
@@ -232,36 +232,36 @@ export function AuthPanel({ appName }: { appName: string }) {
   return (
     <>
       <SignedOut>
-        <section className="masjid-pattern mx-auto grid min-h-[650px] max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.65fr)]">
-          <div className="relative">
-            <p className="inline-flex items-center gap-2 rounded-full bg-cedar/10 px-4 py-2 text-sm font-bold text-cedar">
+        <section className="masjid-pattern mx-auto grid min-h-[calc(100vh-2rem)] max-w-6xl items-center gap-5 py-3 sm:gap-8 sm:py-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.65fr)]">
+          <div className="relative order-2 lg:order-1">
+            <p className="inline-flex max-w-full items-center gap-2 rounded-full bg-cedar/10 px-3 py-2 text-xs font-bold text-cedar sm:px-4 sm:text-sm">
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              {appName}
+              <span className="truncate">{appName}</span>
             </p>
-            <h1 className="mt-5 max-w-3xl text-4xl font-bold leading-tight text-ink sm:text-6xl">
+            <h1 className="mt-4 max-w-3xl text-3xl font-bold leading-tight text-ink sm:mt-5 sm:text-5xl lg:text-6xl">
               {text.welcomeTitle}
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-700">
+            <p className="mt-4 max-w-2xl text-base leading-8 text-slate-700 sm:mt-5 sm:text-lg">
               {text.welcomeBody}
             </p>
           </div>
 
-          <div className="relative rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-2xl shadow-cedar/10 backdrop-blur">
+          <div className="relative order-1 rounded-3xl border border-white/70 bg-white/90 p-4 shadow-2xl shadow-cedar/10 backdrop-blur sm:p-5 lg:order-2">
             <AuthView pathname={pathname} redirectTo={import.meta.env.BASE_URL} />
           </div>
         </section>
       </SignedOut>
 
       <SignedIn>
-        <section className="space-y-6">
-          <header className="rounded-[2rem] border border-white/70 bg-white/80 p-5 shadow-xl shadow-cedar/5 backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="inline-flex items-center gap-2 rounded-full bg-cedar/10 px-3 py-1 text-xs font-bold text-cedar">
+        <section className="space-y-4 sm:space-y-6">
+          <header className="rounded-3xl border border-white/70 bg-white/80 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <p className="inline-flex max-w-full items-center gap-2 rounded-full bg-cedar/10 px-3 py-1 text-xs font-bold text-cedar">
                   <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-                  {appName}
+                  <span className="truncate">{appName}</span>
                 </p>
-                <h1 className="mt-3 text-3xl font-bold text-ink">
+                <h1 className="mt-3 text-2xl font-bold text-ink sm:text-3xl">
                   {text.workspace}
                 </h1>
               </div>

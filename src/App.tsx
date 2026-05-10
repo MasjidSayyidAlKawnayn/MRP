@@ -67,18 +67,18 @@ export default function App() {
   if (!hasAppConfig) {
     return (
       <main dir="rtl" className="min-h-screen bg-paper text-ink">
-        <div className="masjid-pattern mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-5 py-8 sm:px-8">
-          <div className="relative rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-2xl shadow-cedar/10 backdrop-blur md:p-10">
-            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+        <div className="masjid-pattern mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-4 py-5 sm:px-6 sm:py-8">
+          <div className="relative rounded-3xl border border-white/70 bg-white/85 p-4 shadow-2xl shadow-cedar/10 backdrop-blur sm:p-6 md:p-10">
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full bg-cedar/10 px-4 py-2 text-sm font-bold text-cedar">
+                <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-cedar/10 px-3 py-2 text-xs font-bold text-cedar sm:px-4 sm:text-sm">
                   <Settings2 className="h-4 w-4" aria-hidden="true" />
-                  {appName}
+                  <span className="truncate">{appName}</span>
                 </div>
-                <h1 className="mt-5 text-3xl font-bold leading-tight text-ink sm:text-5xl">
+                <h1 className="mt-5 text-2xl font-bold leading-tight text-ink sm:text-4xl md:text-5xl">
                   {"\u064A\u0644\u0632\u0645 \u0625\u0643\u0645\u0627\u0644 \u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0642\u0628\u0644 \u062A\u0634\u063A\u064A\u0644 \u0627\u0644\u0645\u0646\u0635\u0629."}
                 </h1>
-                <p className="mt-5 text-base leading-8 text-slate-700 sm:text-lg">
+                <p className="mt-4 text-sm leading-7 text-slate-700 sm:mt-5 sm:text-base md:text-lg">
                   {"\u062A\u0623\u0643\u062F \u0645\u0646 \u0636\u0628\u0637 \u0625\u0639\u062F\u0627\u062F\u0627\u062A Neon Auth \u0648\u0648\u0627\u062C\u0647\u0629 \u0628\u064A\u0627\u0646\u0627\u062A Neon \u0648\u0642\u0627\u0626\u0645\u0629 \u0645\u062F\u064A\u0631\u064A \u0627\u0644\u0646\u0638\u0627\u0645 \u062D\u062A\u0649 \u062A\u0639\u0645\u0644 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0625\u062F\u0627\u0631\u0629 \u0628\u0623\u0645\u0627\u0646."}
                 </p>
               </div>
@@ -87,7 +87,7 @@ export default function App() {
               </div>
             </div>
 
-            <ul className="mt-8 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
+            <ul className="mt-6 grid gap-3 text-sm text-slate-700 sm:mt-8 md:grid-cols-3">
               <ConfigItem
                 label={"\u0631\u0627\u0628\u0637 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644"}
                 name="VITE_NEON_AUTH_URL"
@@ -126,7 +126,7 @@ export default function App() {
     >
       <AuthProvider>
         <main dir="rtl" className="min-h-screen bg-paper text-ink">
-          <div className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:py-12">
+          <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
             <AuthPanel appName={appName} />
           </div>
         </main>
@@ -145,7 +145,7 @@ function ConfigItem({
   ok: boolean;
 }) {
   return (
-    <li className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <li className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="flex items-start gap-3">
         <span
           className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full ${

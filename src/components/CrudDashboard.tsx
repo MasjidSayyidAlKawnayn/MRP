@@ -212,9 +212,9 @@ function EntityNav({
   onSelect: (entityId: EntityId) => void;
 }) {
   return (
-    <aside className="rounded-[2rem] border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur">
+    <aside className="rounded-3xl border border-white/70 bg-white/85 p-3 shadow-xl shadow-cedar/5 backdrop-blur sm:p-4">
       <h2 className="px-2 text-xs font-bold text-slate-500">{ui.crudPages}</h2>
-      <div className="mt-4 grid gap-2">
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:mt-4 lg:grid lg:overflow-visible lg:pb-0">
         {entityDefinitions
           .filter((entity) => entity.showInNav !== false)
           .map((entity) => {
@@ -222,7 +222,7 @@ function EntityNav({
 
             return (
               <button
-                className={`flex min-h-14 items-center gap-3 rounded-2xl px-3 py-2 text-right text-sm font-bold transition ${
+                className={`flex min-h-14 min-w-[11rem] items-center gap-3 rounded-2xl px-3 py-2 text-right text-sm font-bold transition lg:min-w-0 ${
                   entity.id === activeEntityId
                     ? "bg-cedar text-white shadow-lg shadow-cedar/25"
                     : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
@@ -247,7 +247,7 @@ function EntityNav({
 }
 
 const inputClass =
-  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-ink shadow-sm transition placeholder:text-slate-400 focus:border-cedar";
+  "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-ink shadow-sm transition placeholder:text-slate-400 focus:border-cedar sm:text-sm";
 
 function EntityForm({
   entity,
@@ -299,10 +299,10 @@ function EntityForm({
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => (
           <label
-            className={field.type === "textarea" ? "md:col-span-2" : undefined}
+            className={field.type === "textarea" ? "sm:col-span-2" : undefined}
             key={field.key}
           >
             <span className="text-sm font-bold text-slate-700">
@@ -408,9 +408,9 @@ function EntityForm({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="grid gap-3 sm:flex sm:flex-wrap">
         <button
-          className="inline-flex items-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60 sm:w-auto"
           disabled={isSaving}
           type="submit"
         >
@@ -422,7 +422,7 @@ function EntityForm({
           {isSaving ? ui.saving : ui.save}
         </button>
         <button
-          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto"
           onClick={onCancel}
           type="button"
         >
@@ -448,16 +448,16 @@ function DetailView({
   relationOptions: RelationOptions;
 }) {
   return (
-    <div className="rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl shadow-cedar/5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold text-cedar">{ui.view}</p>
-          <h2 className="mt-1 text-2xl font-bold text-ink">
+          <h2 className="mt-1 break-words text-xl font-bold text-ink sm:text-2xl">
             {getRowLabel(entity, row)}
           </h2>
         </div>
         <button
-          className="inline-flex items-center gap-2 rounded-2xl bg-ink px-4 py-2 text-sm font-bold text-white transition hover:bg-palm"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-2.5 text-sm font-bold text-white transition hover:bg-palm sm:w-auto sm:py-2"
           onClick={onEdit}
           type="button"
         >
@@ -466,7 +466,7 @@ function DetailView({
         </button>
       </div>
 
-      <dl className="mt-5 grid gap-3 md:grid-cols-2">
+      <dl className="mt-5 grid gap-3 sm:grid-cols-2">
         {entity.fields.map((field) => (
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={field.key}>
             <dt className="text-xs font-bold text-slate-500">{field.label}</dt>
@@ -510,7 +510,7 @@ function SchemaPicker({
   onSelect: (schema: SchemaName) => void;
 }) {
   return (
-    <label className="flex min-w-48 flex-col gap-2 text-sm font-bold text-slate-700">
+    <label className="flex w-full flex-col gap-2 text-sm font-bold text-slate-700 sm:min-w-48 sm:w-auto">
       <span>{ui.schema}</span>
       <select
         className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
@@ -537,17 +537,84 @@ function StatCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-sm">
+    <div className="rounded-2xl border border-white/70 bg-white/85 p-3 shadow-sm sm:rounded-3xl sm:p-4">
       <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cedar/10 text-cedar">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cedar/10 text-cedar sm:h-11 sm:w-11">
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-bold text-slate-500">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
+          <p className="mt-1 text-xl font-bold text-ink sm:text-2xl">{value}</p>
         </div>
       </div>
     </div>
+  );
+}
+
+function MobileRecordCard({
+  activeEntity,
+  entityDefinitions,
+  relationOptions,
+  row,
+  onDelete,
+  onEdit,
+  onView,
+}: {
+  activeEntity: EntityDefinition;
+  entityDefinitions: EntityDefinition[];
+  relationOptions: RelationOptions;
+  row: CrudRow;
+  onDelete: () => void;
+  onEdit: () => void;
+  onView: () => void;
+}) {
+  const primaryKey = activeEntity.listFields[0];
+  const secondaryFields = activeEntity.listFields.slice(1, 4);
+
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-cedar">
+            {getField(activeEntity, primaryKey)?.label ?? activeEntity.singularLabel}
+          </p>
+          <h3 className="mt-1 break-words text-base font-bold text-ink">
+            {formatFieldValue(
+              getField(activeEntity, primaryKey),
+              row[primaryKey],
+              relationOptions,
+              entityDefinitions,
+            )}
+          </h3>
+        </div>
+        <ActionButton icon={Eye} label={ui.view} onClick={onView} compact />
+      </div>
+
+      {secondaryFields.length ? (
+        <dl className="mt-4 grid gap-2">
+          {secondaryFields.map((key) => (
+            <div className="rounded-xl bg-slate-50 px-3 py-2" key={key}>
+              <dt className="text-xs font-bold text-slate-500">
+                {getField(activeEntity, key)?.label ?? key}
+              </dt>
+              <dd className="mt-1 break-words text-sm font-semibold text-slate-700">
+                {formatFieldValue(
+                  getField(activeEntity, key),
+                  row[key],
+                  relationOptions,
+                  entityDefinitions,
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <ActionButton icon={Pencil} label={ui.edit} onClick={onEdit} />
+        <ActionButton danger icon={Trash2} label={ui.delete} onClick={onDelete} />
+      </div>
+    </article>
   );
 }
 
@@ -703,23 +770,23 @@ export function CrudDashboard() {
   const ActiveIcon = entityIcons[getEntityKey(activeEntity.id)] ?? Database;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
+    <div className="grid gap-4 sm:gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
       <EntityNav
         activeEntityId={activeEntity.id}
         entityDefinitions={entityDefinitions}
         onSelect={setActiveEntityId}
       />
 
-      <section className="min-w-0 space-y-5">
-        <div className="rounded-[2rem] border border-white/70 bg-white/85 p-5 shadow-xl shadow-cedar/5 backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex min-w-0 gap-4">
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/25">
-                <ActiveIcon className="h-7 w-7" aria-hidden="true" />
+      <section className="min-w-0 space-y-4 sm:space-y-5">
+        <div className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex min-w-0 gap-3 sm:gap-4">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/25 sm:h-14 sm:w-14">
+                <ActiveIcon className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden="true" />
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-cedar">{ui.adminCrud}</p>
-                <h1 className="mt-1 text-3xl font-bold text-ink">
+                <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
                   {activeEntity.label}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
@@ -727,14 +794,14 @@ export function CrudDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="grid gap-3 sm:grid-cols-[minmax(12rem,1fr)_auto_auto] sm:items-end xl:flex xl:flex-wrap">
               <SchemaPicker
                 activeSchema={activeSchema}
                 onSelect={setActiveSchema}
                 schemas={schemas}
               />
               <button
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto"
                 onClick={() => void refreshRows()}
                 type="button"
               >
@@ -742,7 +809,7 @@ export function CrudDashboard() {
                 {ui.refresh}
               </button>
               <button
-                className="inline-flex items-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:w-auto"
                 onClick={() => {
                   setSelectedRow(null);
                   setMode("create");
@@ -756,7 +823,7 @@ export function CrudDashboard() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard icon={Database} label={ui.totalRecords} value={rows.length} />
           <StatCard icon={ListFilter} label={ui.visibleRecords} value={filteredRows.length} />
           <StatCard icon={Layers3} label={ui.tableFields} value={activeEntity.listFields.length} />
@@ -770,7 +837,7 @@ export function CrudDashboard() {
         ) : null}
 
         {mode === "create" ? (
-          <div className="rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl shadow-cedar/5">
+          <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
             <h2 className="mb-5 text-xl font-bold text-ink">
               {ui.create} {activeEntity.singularLabel}
             </h2>
@@ -786,7 +853,7 @@ export function CrudDashboard() {
         ) : null}
 
         {mode === "edit" && selectedRow ? (
-          <div className="rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-xl shadow-cedar/5">
+          <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
             <h2 className="mb-5 text-xl font-bold text-ink">
               {ui.edit} {getRowLabel(activeEntity, selectedRow)}
             </h2>
@@ -812,8 +879,8 @@ export function CrudDashboard() {
           />
         ) : null}
 
-        <div className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4">
+        <div className="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
+          <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div>
               <h2 className="text-lg font-bold text-ink">{ui.records}</h2>
               <p className="mt-1 text-xs text-slate-500">
@@ -823,7 +890,7 @@ export function CrudDashboard() {
             <label className="relative block w-full sm:w-72">
               <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pe-4 ps-10 text-sm shadow-sm"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pe-4 ps-10 text-base shadow-sm sm:text-sm"
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder={`${ui.search} ${activeEntity.label}`}
                 type="search"
@@ -833,16 +900,37 @@ export function CrudDashboard() {
           </div>
 
           {isLoading ? (
-            <p className="flex items-center gap-2 p-5 text-sm text-slate-600">
+            <p className="flex items-center gap-2 p-4 text-sm text-slate-600 sm:p-5">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               {ui.loading}
             </p>
           ) : rows.length === 0 ? (
-            <p className="p-5 text-sm text-slate-600">{ui.noRecords}</p>
+            <p className="p-4 text-sm text-slate-600 sm:p-5">{ui.noRecords}</p>
           ) : filteredRows.length === 0 ? (
-            <p className="p-5 text-sm text-slate-600">{ui.noMatches}</p>
+            <p className="p-4 text-sm text-slate-600 sm:p-5">{ui.noMatches}</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="grid gap-3 p-4 md:hidden">
+              {filteredRows.map((row) => (
+                <MobileRecordCard
+                  activeEntity={activeEntity}
+                  entityDefinitions={entityDefinitions}
+                  key={String(row.id)}
+                  onDelete={() => void handleSoftDelete(row)}
+                  onEdit={() => {
+                    setSelectedRow(row);
+                    setMode("edit");
+                  }}
+                  onView={() => {
+                    setSelectedRow(row);
+                    setMode("detail");
+                  }}
+                  relationOptions={relationOptions}
+                  row={row}
+                />
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full divide-y divide-slate-200 text-right text-sm">
                 <thead className="bg-mist/70">
                   <tr>
@@ -887,6 +975,7 @@ export function CrudDashboard() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </section>
@@ -899,7 +988,9 @@ function ActionButton({
   icon: Icon,
   label,
   onClick,
+  compact,
 }: {
+  compact?: boolean;
   danger?: boolean;
   icon: LucideIcon;
   label: string;
@@ -907,16 +998,17 @@ function ActionButton({
 }) {
   return (
     <button
-      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
         danger
           ? "bg-red-50 text-red-700 hover:bg-red-100"
           : "bg-slate-100 text-slate-700 hover:bg-cedar/10 hover:text-cedar"
       }`}
+      aria-label={compact ? label : undefined}
       onClick={onClick}
       type="button"
     >
       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      {label}
+      <span className={compact ? "sr-only" : undefined}>{label}</span>
     </button>
   );
 }
