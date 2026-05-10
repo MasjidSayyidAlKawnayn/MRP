@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   BookOpen,
   CalendarCheck,
@@ -7,8 +7,6 @@ import {
   Eye,
   FileText,
   GraduationCap,
-  Layers3,
-  ListFilter,
   Loader2,
   Pencil,
   Plus,
@@ -45,16 +43,64 @@ import {
 
 type ViewMode = "list" | "create" | "detail" | "edit";
 type RelationOptions = Partial<Record<EntityId, CrudRow[]>>;
+type PendingDetail = {
+  entityId: EntityId;
+  rowId: CrudValue;
+} | null;
+
+const groupColorClasses = [
+  {
+    row: "bg-emerald-50/65 hover:bg-emerald-100/70",
+    chip: "border-emerald-200 bg-emerald-100 text-emerald-800",
+    marker: "bg-emerald-500",
+  },
+  {
+    row: "bg-sky-50/70 hover:bg-sky-100/75",
+    chip: "border-sky-200 bg-sky-100 text-sky-800",
+    marker: "bg-sky-500",
+  },
+  {
+    row: "bg-amber-50/70 hover:bg-amber-100/75",
+    chip: "border-amber-200 bg-amber-100 text-amber-800",
+    marker: "bg-amber-500",
+  },
+  {
+    row: "bg-rose-50/65 hover:bg-rose-100/70",
+    chip: "border-rose-200 bg-rose-100 text-rose-800",
+    marker: "bg-rose-500",
+  },
+  {
+    row: "bg-violet-50/60 hover:bg-violet-100/70",
+    chip: "border-violet-200 bg-violet-100 text-violet-800",
+    marker: "bg-violet-500",
+  },
+  {
+    row: "bg-teal-50/70 hover:bg-teal-100/75",
+    chip: "border-teal-200 bg-teal-100 text-teal-800",
+    marker: "bg-teal-500",
+  },
+  {
+    row: "bg-orange-50/65 hover:bg-orange-100/70",
+    chip: "border-orange-200 bg-orange-100 text-orange-800",
+    marker: "bg-orange-500",
+  },
+  {
+    row: "bg-cyan-50/70 hover:bg-cyan-100/75",
+    chip: "border-cyan-200 bg-cyan-100 text-cyan-800",
+    marker: "bg-cyan-500",
+  },
+] as const;
 
 const ui = {
   crudPages: "\u0623\u0642\u0633\u0627\u0645 \u0627\u0644\u0645\u0646\u0635\u0629",
   adminCrud: "\u0644\u0648\u062D\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A",
+  settings: "\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A",
+  settingsTitle: "\u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A",
+  settingsBody:
+    "\u0627\u062E\u062A\u0631 \u0645\u062E\u0637\u0637 \u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u0630\u064A \u0633\u062A\u0639\u0645\u0644 \u0639\u0644\u064A\u0647 \u0644\u0648\u062D\u0629 \u0627\u0644\u0625\u062F\u0627\u0631\u0629.",
+  activeSchema: "\u0627\u0644\u0645\u062E\u0637\u0637 \u0627\u0644\u0646\u0634\u0637",
   schema: "\u0627\u0644\u0645\u062E\u0637\u0637",
-  records: "\u0627\u0644\u0633\u062C\u0644\u0627\u062A",
-  totalRecords: "\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0633\u062C\u0644\u0627\u062A",
-  visibleRecords: "\u0627\u0644\u0633\u062C\u0644\u0627\u062A \u0627\u0644\u0638\u0627\u0647\u0631\u0629",
-  tableFields: "\u0623\u0639\u0645\u062F\u0629 \u0627\u0644\u062C\u062F\u0648\u0644",
-  relations: "\u0631\u0648\u0627\u0628\u0637 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A",
+  data: "\u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A",
   add: "\u0625\u0636\u0627\u0641\u0629",
   create: "\u0625\u0646\u0634\u0627\u0621",
   edit: "\u062A\u0639\u062F\u064A\u0644",
@@ -68,18 +114,18 @@ const ui = {
   select: "\u0627\u062E\u062A\u0631",
   yes: "\u0646\u0639\u0645",
   no: "\u0644\u0627",
-  loading: "\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0633\u062C\u0644\u0627\u062A...",
-  noRecords: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0633\u062C\u0644\u0627\u062A \u0628\u0639\u062F.",
+  loading: "\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A...",
+  noRecords: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0628\u064A\u0627\u0646\u0627\u062A \u0628\u0639\u062F.",
   noMatches: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0646\u062A\u0627\u0626\u062C \u062A\u0637\u0627\u0628\u0642 \u0627\u0644\u0628\u062D\u062B.",
   search: "\u0628\u062D\u062B",
   actions: "\u0627\u0644\u0625\u062C\u0631\u0627\u0621\u0627\u062A",
   showing: "\u0627\u0644\u0645\u0639\u0631\u0648\u0636",
   from: "\u0645\u0646",
-  createError: "\u062A\u0639\u0630\u0631 \u062D\u0641\u0638 \u0647\u0630\u0627 \u0627\u0644\u0633\u062C\u0644.",
-  loadError: "\u062A\u0639\u0630\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0633\u062C\u0644\u0627\u062A.",
-  invalidId: "\u0647\u0630\u0627 \u0627\u0644\u0633\u062C\u0644 \u0644\u0627 \u064A\u062D\u0645\u0644 \u0645\u0639\u0631\u0641\u0627 \u0635\u0627\u0644\u062D\u0627.",
+  createError: "\u062A\u0639\u0630\u0631 \u062D\u0641\u0638 \u0647\u0630\u0647 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A.",
+  loadError: "\u062A\u0639\u0630\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A.",
+  invalidId: "\u0647\u0630\u0627 \u0627\u0644\u0639\u0646\u0635\u0631 \u0644\u0627 \u064A\u062D\u0645\u0644 \u0645\u0639\u0631\u0641\u0627 \u0635\u0627\u0644\u062D\u0627.",
   confirmDelete: "\u061F\u0647\u0644 \u062A\u0631\u064A\u062F \u062D\u0630\u0641",
-  hideRecord: "\u0633\u064A\u062A\u0645 \u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0633\u062C\u0644 \u0645\u0646 \u0627\u0644\u062A\u0637\u0628\u064A\u0642.",
+  hideRecord: "\u0633\u064A\u062A\u0645 \u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0639\u0646\u0635\u0631 \u0645\u0646 \u0627\u0644\u062A\u0637\u0628\u064A\u0642.",
 };
 
 const entityIcons: Record<EntityKey, LucideIcon> = {
@@ -139,6 +185,37 @@ function toInputValue(value: CrudValue, field: FieldDefinition) {
 
 function getField(entity: EntityDefinition, key: string) {
   return entity.fields.find((field) => field.key === key);
+}
+
+function getGroupColor(value: CrudValue | undefined) {
+  const text = formatValue(value);
+  const hash = Array.from(text).reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  );
+
+  return groupColorClasses[hash % groupColorClasses.length];
+}
+
+function getRelatedRow(
+  field: FieldDefinition | undefined,
+  value: CrudValue | undefined,
+  relationOptions: RelationOptions,
+) {
+  if (
+    !field?.relation ||
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  return (
+    relationOptions[field.relation.entityId]?.find(
+      (row) => String(row.id) === String(value),
+    ) ?? null
+  );
 }
 
 function getRelationLabel(
@@ -212,9 +289,9 @@ function EntityNav({
   onSelect: (entityId: EntityId) => void;
 }) {
   return (
-    <aside className="rounded-3xl border border-white/70 bg-white/85 p-3 shadow-xl shadow-cedar/5 backdrop-blur sm:p-4">
+    <aside className="min-w-0 overflow-hidden rounded-3xl border border-white/70 bg-white/85 p-3 shadow-xl shadow-cedar/5 backdrop-blur sm:p-4">
       <h2 className="px-2 text-xs font-bold text-slate-500">{ui.crudPages}</h2>
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:mt-4 lg:grid lg:overflow-visible lg:pb-0">
+      <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 lg:mt-4 lg:grid lg:overflow-visible lg:pb-0">
         {entityDefinitions
           .filter((entity) => entity.showInNav !== false)
           .map((entity) => {
@@ -222,7 +299,7 @@ function EntityNav({
 
             return (
               <button
-                className={`flex min-h-14 min-w-[11rem] items-center gap-3 rounded-2xl px-3 py-2 text-right text-sm font-bold transition lg:min-w-0 ${
+                className={`flex min-h-14 min-w-[11rem] shrink-0 items-center gap-3 rounded-2xl px-3 py-2 text-right text-sm font-bold transition lg:min-w-0 lg:shrink ${
                   entity.id === activeEntityId
                     ? "bg-cedar text-white shadow-lg shadow-cedar/25"
                     : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
@@ -485,7 +562,7 @@ function DetailView({
   );
 }
 
-function getConfiguredSchemas() {
+export function getConfiguredSchemas() {
   const configuredSchemas = import.meta.env.VITE_NEON_SCHEMAS;
 
   if (!configuredSchemas) {
@@ -527,100 +604,58 @@ function SchemaPicker({
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
+export function SchemaSettingsPage({
+  activeSchema,
+  schemas,
+  onSelect,
 }: {
-  icon: LucideIcon;
-  label: string;
-  value: string | number;
+  activeSchema: SchemaName;
+  schemas: SchemaName[];
+  onSelect: (schema: SchemaName) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-white/70 bg-white/85 p-3 shadow-sm sm:rounded-3xl sm:p-4">
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cedar/10 text-cedar sm:h-11 sm:w-11">
-          <Icon className="h-5 w-5" aria-hidden="true" />
-        </span>
+    <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-bold text-slate-500">{label}</p>
-          <p className="mt-1 text-xl font-bold text-ink sm:text-2xl">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MobileRecordCard({
-  activeEntity,
-  entityDefinitions,
-  relationOptions,
-  row,
-  onDelete,
-  onEdit,
-  onView,
-}: {
-  activeEntity: EntityDefinition;
-  entityDefinitions: EntityDefinition[];
-  relationOptions: RelationOptions;
-  row: CrudRow;
-  onDelete: () => void;
-  onEdit: () => void;
-  onView: () => void;
-}) {
-  const primaryKey = activeEntity.listFields[0];
-  const secondaryFields = activeEntity.listFields.slice(1, 4);
-
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold text-cedar">
-            {getField(activeEntity, primaryKey)?.label ?? activeEntity.singularLabel}
+          <p className="text-sm font-bold text-cedar">{ui.settings}</p>
+          <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
+            {ui.settingsTitle}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+            {ui.settingsBody}
           </p>
-          <h3 className="mt-1 break-words text-base font-bold text-ink">
-            {formatFieldValue(
-              getField(activeEntity, primaryKey),
-              row[primaryKey],
-              relationOptions,
-              entityDefinitions,
-            )}
-          </h3>
         </div>
-        <ActionButton icon={Eye} label={ui.view} onClick={onView} compact />
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/25 sm:h-14 sm:w-14">
+          <Database className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden="true" />
+        </span>
       </div>
 
-      {secondaryFields.length ? (
-        <dl className="mt-4 grid gap-2">
-          {secondaryFields.map((key) => (
-            <div className="rounded-xl bg-slate-50 px-3 py-2" key={key}>
-              <dt className="text-xs font-bold text-slate-500">
-                {getField(activeEntity, key)?.label ?? key}
-              </dt>
-              <dd className="mt-1 break-words text-sm font-semibold text-slate-700">
-                {formatFieldValue(
-                  getField(activeEntity, key),
-                  row[key],
-                  relationOptions,
-                  entityDefinitions,
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <ActionButton icon={Pencil} label={ui.edit} onClick={onEdit} />
-        <ActionButton danger icon={Trash2} label={ui.delete} onClick={onDelete} />
+      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <SchemaPicker
+            activeSchema={activeSchema}
+            onSelect={onSelect}
+            schemas={schemas}
+          />
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-bold text-slate-500">{ui.activeSchema}</p>
+          <p className="mt-2 break-all text-2xl font-bold text-ink">
+            {activeSchema}
+          </p>
+        </div>
       </div>
-    </article>
+    </section>
   );
 }
 
-export function CrudDashboard() {
-  const schemas = useMemo(() => getConfiguredSchemas(), []);
-  const [activeSchema, setActiveSchema] = useState<SchemaName>(schemas[0]);
+export function CrudDashboard({
+  activeSchema,
+  topAccessory,
+}: {
+  activeSchema: SchemaName;
+  topAccessory: ReactNode;
+}) {
   const entityDefinitions = useMemo(
     () => getEntityDefinitions(activeSchema),
     [activeSchema],
@@ -631,6 +666,7 @@ export function CrudDashboard() {
   const activeEntity =
     findEntityDefinition(activeEntityId, entityDefinitions) ??
     entityDefinitions[0];
+  const activeEntityKey = getEntityKey(activeEntity.id);
   const [rows, setRows] = useState<CrudRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
   const [mode, setMode] = useState<ViewMode>("list");
@@ -638,6 +674,7 @@ export function CrudDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [relationOptions, setRelationOptions] = useState<RelationOptions>({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [pendingDetail, setPendingDetail] = useState<PendingDetail>(null);
 
   const relationEntityIds = useMemo(
     () =>
@@ -674,6 +711,24 @@ export function CrudDashboard() {
     setMode("list");
     void refreshRows(activeEntity);
   }, [activeEntity]);
+
+  useEffect(() => {
+    if (!pendingDetail || pendingDetail.entityId !== activeEntity.id) {
+      return;
+    }
+
+    const row = rows.find(
+      (currentRow) => String(currentRow.id) === String(pendingDetail.rowId),
+    );
+
+    if (!row) {
+      return;
+    }
+
+    setSelectedRow(row);
+    setMode("detail");
+    setPendingDetail(null);
+  }, [activeEntity.id, pendingDetail, rows]);
 
   useEffect(() => {
     let isMounted = true;
@@ -767,68 +822,46 @@ export function CrudDashboard() {
     await refreshRows();
   }
 
-  const ActiveIcon = entityIcons[getEntityKey(activeEntity.id)] ?? Database;
+  function handleRelationDetail(field: FieldDefinition, row: CrudRow) {
+    if (!field.relation) {
+      return;
+    }
+
+    const relatedRow = getRelatedRow(field, row[field.key], relationOptions);
+
+    if (!relatedRow) {
+      return;
+    }
+
+    setPendingDetail({
+      entityId: field.relation.entityId,
+      rowId: relatedRow.id,
+    });
+    setActiveEntityId(field.relation.entityId);
+  }
 
   return (
-    <div className="grid gap-4 sm:gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
-      <EntityNav
-        activeEntityId={activeEntity.id}
-        entityDefinitions={entityDefinitions}
-        onSelect={setActiveEntityId}
-      />
-
-      <section className="min-w-0 space-y-4 sm:space-y-5">
-        <div className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="flex min-w-0 gap-3 sm:gap-4">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/25 sm:h-14 sm:w-14">
-                <ActiveIcon className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-cedar">{ui.adminCrud}</p>
-                <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
-                  {activeEntity.label}
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
-                  {activeEntity.description}
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-[minmax(12rem,1fr)_auto_auto] sm:items-end xl:flex xl:flex-wrap">
-              <SchemaPicker
-                activeSchema={activeSchema}
-                onSelect={setActiveSchema}
-                schemas={schemas}
-              />
-              <button
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto"
-                onClick={() => void refreshRows()}
-                type="button"
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                {ui.refresh}
-              </button>
-              <button
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cedar px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:w-auto"
-                onClick={() => {
-                  setSelectedRow(null);
-                  setMode("create");
-                }}
-                type="button"
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                {ui.add} {activeEntity.singularLabel}
-              </button>
-            </div>
+    <div className="min-w-0 space-y-4 sm:space-y-6">
+      <div className="relative z-50 flex min-w-0 items-start justify-between gap-3 px-1">
+        <div className="flex min-w-0 justify-end">
+          <div className="min-w-0 text-right">
+            <p className="text-sm font-bold text-cedar">{ui.adminCrud}</p>
+            <h1 className="mt-0.5 truncate text-2xl font-bold text-ink sm:text-3xl">
+              {activeEntity.label}
+            </h1>
           </div>
         </div>
+        <div className="shrink-0">{topAccessory}</div>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard icon={Database} label={ui.totalRecords} value={rows.length} />
-          <StatCard icon={ListFilter} label={ui.visibleRecords} value={filteredRows.length} />
-          <StatCard icon={Layers3} label={ui.tableFields} value={activeEntity.listFields.length} />
-          <StatCard icon={RefreshCw} label={ui.relations} value={relationEntityIds.length} />
-        </div>
+      <div className="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <EntityNav
+          activeEntityId={activeEntity.id}
+          entityDefinitions={entityDefinitions}
+          onSelect={setActiveEntityId}
+        />
+
+        <section className="min-w-0 space-y-4 sm:space-y-5">
 
         {error ? (
           <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -880,17 +913,42 @@ export function CrudDashboard() {
         ) : null}
 
         <div className="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
-          <div className="flex flex-col gap-3 border-b border-slate-200/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div>
-              <h2 className="text-lg font-bold text-ink">{ui.records}</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                {ui.showing} {filteredRows.length} {ui.from} {rows.length}
-              </p>
+          <div className="space-y-3 border-b border-slate-200/80 px-3 py-3 sm:px-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 text-right">
+                <h2 className="text-lg font-bold text-ink">{activeEntity.label}</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {ui.showing} {filteredRows.length} {ui.from} {rows.length}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  aria-label={ui.refresh}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-11 sm:w-11"
+                  onClick={() => void refreshRows()}
+                  title={ui.refresh}
+                  type="button"
+                >
+                  <RefreshCw className="h-5 w-5" aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={`${ui.add} ${activeEntity.singularLabel}`}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:h-11 sm:w-11"
+                  onClick={() => {
+                    setSelectedRow(null);
+                    setMode("create");
+                  }}
+                  title={`${ui.add} ${activeEntity.singularLabel}`}
+                  type="button"
+                >
+                  <Plus className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
             </div>
-            <label className="relative block w-full sm:w-72">
+            <label className="relative block w-full">
               <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pe-4 ps-10 text-base shadow-sm sm:text-sm"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pe-4 ps-10 text-sm shadow-sm"
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder={`${ui.search} ${activeEntity.label}`}
                 type="search"
@@ -910,75 +968,101 @@ export function CrudDashboard() {
             <p className="p-4 text-sm text-slate-600 sm:p-5">{ui.noMatches}</p>
           ) : (
             <>
-            <div className="grid gap-3 p-4 md:hidden">
-              {filteredRows.map((row) => (
-                <MobileRecordCard
-                  activeEntity={activeEntity}
-                  entityDefinitions={entityDefinitions}
-                  key={String(row.id)}
-                  onDelete={() => void handleSoftDelete(row)}
-                  onEdit={() => {
-                    setSelectedRow(row);
-                    setMode("edit");
-                  }}
-                  onView={() => {
-                    setSelectedRow(row);
-                    setMode("detail");
-                  }}
-                  relationOptions={relationOptions}
-                  row={row}
-                />
-              ))}
-            </div>
-            <div className="hidden overflow-x-auto md:block">
-              <table className="min-w-full divide-y divide-slate-200 text-right text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed divide-y divide-slate-200 text-right text-xs sm:text-sm">
                 <thead className="bg-mist/70">
                   <tr>
+                    {activeEntityKey === "students" ? (
+                      <th className="w-10 px-2 py-2 font-bold text-slate-600 sm:px-3">
+                        <span className="sr-only">لون المجموعة</span>
+                      </th>
+                    ) : null}
                     {activeEntity.listFields.map((key) => (
-                      <th className="whitespace-nowrap px-5 py-4 font-bold text-slate-600" key={key}>
+                      <th className="break-words px-2 py-2 font-bold leading-5 text-slate-600 sm:px-3" key={key}>
                         {getField(activeEntity, key)?.label ?? key}
                       </th>
                     ))}
-                    <th className="px-5 py-4 font-bold text-slate-600">
+                    <th className="w-24 px-2 py-2 font-bold text-slate-600 sm:w-28 sm:px-3">
                       {ui.actions}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredRows.map((row) => (
-                    <tr className="transition hover:bg-cedar/5" key={String(row.id)}>
-                      {activeEntity.listFields.map((key) => (
-                        <td className="max-w-[18rem] truncate whitespace-nowrap px-5 py-4 text-slate-700" key={key}>
-                          {formatFieldValue(
-                            getField(activeEntity, key),
+                  {filteredRows.map((row) => {
+                    const groupColor =
+                      activeEntityKey === "students"
+                        ? getGroupColor(row.groupId ?? row.group)
+                        : null;
+
+                    return (
+                      <tr
+                        className={`transition ${groupColor?.row ?? "hover:bg-cedar/5"}`}
+                        key={String(row.id)}
+                      >
+                        {groupColor ? (
+                          <td className="px-2 py-2 sm:px-3">
+                            <span
+                              className={`mx-auto block h-8 w-2 rounded-full ${groupColor.marker}`}
+                            />
+                          </td>
+                        ) : null}
+                        {activeEntity.listFields.map((key) => {
+                          const field = getField(activeEntity, key);
+                          const isStudentGroup =
+                            activeEntityKey === "students" && key === "groupId";
+                          const value = formatFieldValue(
+                            field,
                             row[key],
                             relationOptions,
                             entityDefinitions,
-                          )}
+                          );
+
+                          return (
+                            <td
+                              className="break-words px-2 py-2 leading-5 text-slate-700 sm:px-3"
+                              key={key}
+                            >
+                              {isStudentGroup && field?.relation ? (
+                                <button
+                                  className={`inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-bold transition hover:shadow-sm sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                                  onClick={() => handleRelationDetail(field, row)}
+                                  type="button"
+                                >
+                                  <span
+                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
+                                  />
+                                  <span className="min-w-0 truncate">{value}</span>
+                                </button>
+                              ) : (
+                                value
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-2 sm:px-3">
+                          <div className="flex gap-1">
+                            <ActionButton compact icon={Eye} label={ui.view} onClick={() => {
+                              setSelectedRow(row);
+                              setMode("detail");
+                            }} />
+                            <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => {
+                              setSelectedRow(row);
+                              setMode("edit");
+                            }} />
+                            <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
+                          </div>
                         </td>
-                      ))}
-                      <td className="whitespace-nowrap px-5 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          <ActionButton icon={Eye} label={ui.view} onClick={() => {
-                            setSelectedRow(row);
-                            setMode("detail");
-                          }} />
-                          <ActionButton icon={Pencil} label={ui.edit} onClick={() => {
-                            setSelectedRow(row);
-                            setMode("edit");
-                          }} />
-                          <ActionButton danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             </>
           )}
         </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }
@@ -998,11 +1082,11 @@ function ActionButton({
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
+      className={`inline-flex items-center justify-center rounded-xl text-xs font-bold transition ${
         danger
           ? "bg-red-50 text-red-700 hover:bg-red-100"
           : "bg-slate-100 text-slate-700 hover:bg-cedar/10 hover:text-cedar"
-      }`}
+      } ${compact ? "h-9 w-9 px-0 py-0" : "gap-1.5 px-3 py-1.5"}`}
       aria-label={compact ? label : undefined}
       onClick={onClick}
       type="button"

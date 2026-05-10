@@ -163,7 +163,7 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
       },
       ...timestamps,
     ],
-    listFields: ["id", "firstName", "lastName", "groupId", "teacherId"],
+    listFields: ["firstName", "lastName", "groupId"],
     displayFields: ["firstName", "lastName"],
   },
   {
