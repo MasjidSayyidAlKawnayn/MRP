@@ -1,24 +1,11 @@
-import { AuthView, SignedIn, SignedOut, UserButton } from "@neondatabase/neon-js/auth/react/ui";
+import {
+  AuthView,
+  SignedIn,
+  SignedOut,
+} from "@neondatabase/neon-js/auth/react/ui";
 import { useEffect, useState } from "react";
-import { authClient } from "../auth/client";
-
-function getStringField(value: unknown, key: string) {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "string" && field.trim() ? field : undefined;
-}
-
-function getBooleanField(value: unknown, key: string) {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "boolean" ? field : undefined;
-}
+import { useAuth } from "../auth/AuthContext";
+import { CrudDashboard } from "./CrudDashboard";
 
 function InfoRow({
   label,
@@ -40,18 +27,19 @@ function InfoRow({
 }
 
 function UserSummary() {
-  const { data, isPending } = authClient.useSession();
-  const user = data?.user;
-  const session = data?.session;
-  const name = getStringField(user, "name");
-  const email = getStringField(user, "email");
-  const image = getStringField(user, "image");
-  const userId = getStringField(user, "id");
-  const emailVerified = getBooleanField(user, "emailVerified");
-  const sessionId = getStringField(session, "id");
-  const expiresAt = getStringField(session, "expiresAt");
+  const {
+    email,
+    emailVerified,
+    expiresAt,
+    image,
+    isAdmin,
+    isLoading,
+    name,
+    sessionId,
+    userId,
+  } = useAuth();
 
-  if (isPending) {
+  if (isLoading) {
     return (
       <div className="border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm text-slate-600">Loading your account...</p>
@@ -81,13 +69,16 @@ function UserSummary() {
           <h2 className="mt-2 text-2xl font-semibold text-ink">
             {name || email || "Account"}
           </h2>
-          {email ? <p className="mt-1 text-sm text-slate-600">{email}</p> : null}
+          {email ? (
+            <p className="mt-1 text-sm text-slate-600">{email}</p>
+          ) : null}
         </div>
       </div>
 
       <dl className="mt-6">
         <InfoRow label="Name" value={name} />
         <InfoRow label="Email" value={email} />
+        <InfoRow label="Admin" value={isAdmin ? "Yes" : "No"} />
         <InfoRow
           label="Email verified"
           value={
@@ -106,8 +97,35 @@ function UserSummary() {
   );
 }
 
+function AccountControls() {
+  const { email, isSigningOut, name, signOut, signOutError } = useAuth();
+
+  return (
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="text-left sm:text-right">
+        <p className="text-sm font-semibold text-ink">{name || "Account"}</p>
+        {email ? <p className="text-xs text-slate-600">{email}</p> : null}
+      </div>
+      <button
+        className="border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={isSigningOut}
+        onClick={() => void signOut().catch(() => undefined)}
+        type="button"
+      >
+        {isSigningOut ? "Signing out..." : "Sign out"}
+      </button>
+      {signOutError ? (
+        <p className="max-w-xs text-left text-xs leading-5 text-red-700 sm:text-right">
+          {signOutError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function AuthPanel() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const { sessionId } = useAuth();
 
   useEffect(() => {
     function syncPathname() {
@@ -135,7 +153,10 @@ export function AuthPanel() {
           </div>
 
           <div className="mt-8 border border-slate-200 bg-white p-5 shadow-sm">
-            <AuthView pathname={pathname} redirectTo={import.meta.env.BASE_URL} />
+            <AuthView
+              pathname={pathname}
+              redirectTo={import.meta.env.BASE_URL}
+            />
           </div>
         </section>
       </SignedOut>
@@ -148,15 +169,55 @@ export function AuthPanel() {
                 MRP frontend
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-ink">
-                Your account
+                Admin workspace
               </h1>
             </div>
-            <UserButton />
+            <AccountControls />
           </header>
 
-          <UserSummary />
+          <SignedInWorkspace key={sessionId ?? "signed-in"} />
         </section>
       </SignedIn>
+    </>
+  );
+}
+
+function SignedInWorkspace() {
+  const { isAdmin, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-sm text-slate-600">Loading your account...</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
+        <UserSummary />
+        <div className="border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-semibold uppercase tracking-wide text-fig">
+            Access denied
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-ink">
+            This account is signed in but not on the admin allowlist.
+          </h2>
+          <p className="mt-4 text-sm leading-6 text-slate-600">
+            CRUD pages are visible only to emails listed in VITE_ADMIN_EMAILS.
+            Database Row-Level Security still controls the final permissions for
+            every Data API request.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <UserSummary />
+      <CrudDashboard />
     </>
   );
 }

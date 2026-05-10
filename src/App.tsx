@@ -1,7 +1,8 @@
 import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { NeonAuthUIProvider } from "@neondatabase/neon-js/auth/react/ui";
+import { AuthProvider } from "./auth/AuthContext";
 import { AuthPanel } from "./components/AuthPanel";
-import { authClient, hasAuthConfig } from "./auth/client";
+import { authClient, configStatus, hasAppConfig } from "./auth/client";
 
 const appBasePath = import.meta.env.BASE_URL;
 const trimmedBasePath = appBasePath.endsWith("/")
@@ -60,7 +61,7 @@ function AuthLink({
 }
 
 export default function App() {
-  if (!hasAuthConfig) {
+  if (!hasAppConfig) {
     return (
       <main className="min-h-screen bg-paper text-ink">
         <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-5 py-8 sm:px-8">
@@ -68,12 +69,28 @@ export default function App() {
             MRP frontend
           </p>
           <h1 className="mt-4 text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-            Neon Auth is not configured.
+            MRP frontend is not configured.
           </h1>
           <p className="mt-5 text-lg leading-8 text-slate-700">
-            Set VITE_NEON_AUTH_URL to the Auth URL from your Neon project
-            before starting or deploying this app.
+            Set the required Neon Auth, Neon Data API, and admin allowlist
+            environment variables before starting or deploying this app.
           </p>
+          <ul className="mt-6 space-y-3 text-sm text-slate-700">
+            <li>
+              <strong>VITE_NEON_AUTH_URL:</strong>{" "}
+              {configStatus.hasAuthConfig ? "configured" : "missing or invalid"}
+            </li>
+            <li>
+              <strong>VITE_NEON_DATA_API_URL:</strong>{" "}
+              {configStatus.hasDataApiConfig
+                ? "configured"
+                : "missing or invalid"}
+            </li>
+            <li>
+              <strong>VITE_ADMIN_EMAILS:</strong>{" "}
+              {configStatus.hasAdminEmails ? "configured" : "missing"}
+            </li>
+          </ul>
         </div>
       </main>
     );
@@ -86,18 +103,20 @@ export default function App() {
       credentials={{
         forgotPassword: true,
         rememberMe: true,
-        username: true,
+        usernameRequired: false,
       }}
       Link={AuthLink}
       navigate={(href) => updateUrl(href, "push")}
       redirectTo={appBasePath}
       replace={(href) => updateUrl(href, "replace")}
     >
-      <main className="min-h-screen bg-paper text-ink">
-        <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 lg:py-12">
-          <AuthPanel />
-        </div>
-      </main>
+      <AuthProvider>
+        <main className="min-h-screen bg-paper text-ink">
+          <div className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:py-12">
+            <AuthPanel />
+          </div>
+        </main>
+      </AuthProvider>
     </NeonAuthUIProvider>
   );
 }
