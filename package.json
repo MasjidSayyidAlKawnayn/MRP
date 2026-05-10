@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "generate:attendance-sql": "node scripts/generate-csv-attendance-sql.mjs",
     "preview": "vite preview",
+    "seed:attendance": "node scripts/run-attendance-seed.mjs",
     "typecheck": "tsc -b"
   },
   "dependencies": {
