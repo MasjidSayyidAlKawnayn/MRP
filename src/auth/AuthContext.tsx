@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { adminEmails, authClient } from "./client";
+import { adminUiEmails, authClient } from "./client";
 
 const appBasePath = import.meta.env.BASE_URL;
 
@@ -41,7 +41,7 @@ export interface AuthContextValue {
   user: unknown;
   session: unknown;
   isAuthenticated: boolean;
-  isAdmin: boolean;
+  hasAdminUiAccess: boolean;
   isLoading: boolean;
   isSigningOut: boolean;
   error: unknown;
@@ -88,8 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       session,
       isAuthenticated: Boolean(user),
-      isAdmin: Boolean(
-        normalizedEmail && adminEmails.includes(normalizedEmail),
+      hasAdminUiAccess: Boolean(
+        normalizedEmail && adminUiEmails.includes(normalizedEmail),
       ),
       isLoading: isPending,
       isSigningOut,

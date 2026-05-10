@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@neondatabase/neon-js": "latest",
+    "lucide-react": "^1.14.0",
     "react": "latest",
     "react-dom": "latest"
   },

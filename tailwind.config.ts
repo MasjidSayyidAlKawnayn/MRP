@@ -5,11 +5,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#18212f",
-        paper: "#f7f3ea",
-        cedar: "#1f6f63",
-        fig: "#7f4265",
-        saffron: "#d79a2b",
+        ink: "#17211f",
+        paper: "#f7f1e6",
+        cedar: "#14685d",
+        fig: "#7a3d5b",
+        saffron: "#c88a1a",
+        palm: "#0f4f46",
+        mist: "#ece5d8",
       },
       fontFamily: {
         sans: [

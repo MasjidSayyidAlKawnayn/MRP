@@ -23,6 +23,8 @@ import {
 type ViewMode = "list" | "create" | "detail" | "edit";
 type RelationOptions = Partial<Record<EntityId, CrudRow[]>>;
 
+const allowedApplicationSchemas = new Set<SchemaName>(["mqs", "wartaqi"]);
+
 function parseInputValue(field: FieldDefinition, value: string): CrudValue {
   if (field.type === "boolean") {
     return value === "true";
@@ -409,7 +411,7 @@ function getConfiguredSchemas() {
   const schemas = configuredSchemas
     .split(",")
     .map((schema) => schema.trim())
-    .filter(Boolean);
+    .filter((schema) => allowedApplicationSchemas.has(schema));
 
   return schemas.length ? schemas : ["mqs"];
 }

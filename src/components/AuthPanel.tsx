@@ -31,8 +31,8 @@ function UserSummary() {
     email,
     emailVerified,
     expiresAt,
+    hasAdminUiAccess,
     image,
-    isAdmin,
     isLoading,
     name,
     sessionId,
@@ -78,7 +78,10 @@ function UserSummary() {
       <dl className="mt-6">
         <InfoRow label="Name" value={name} />
         <InfoRow label="Email" value={email} />
-        <InfoRow label="Admin" value={isAdmin ? "Yes" : "No"} />
+        <InfoRow
+          label="Admin UI access"
+          value={hasAdminUiAccess ? "Yes" : "No"}
+        />
         <InfoRow
           label="Email verified"
           value={
@@ -123,7 +126,7 @@ function AccountControls() {
   );
 }
 
-export function AuthPanel() {
+export function AuthPanel({ appName = "MRP frontend" }: { appName?: string }) {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const { sessionId } = useAuth();
 
@@ -142,7 +145,7 @@ export function AuthPanel() {
         <section className="mx-auto flex min-h-[520px] max-w-xl flex-col justify-center">
           <div className="flex flex-col justify-center">
             <p className="text-sm font-semibold uppercase tracking-wide text-cedar">
-              MRP frontend
+              {appName}
             </p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-ink sm:text-5xl">
               Sign in to MRP.
@@ -166,7 +169,7 @@ export function AuthPanel() {
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-cedar">
-                MRP frontend
+                {appName}
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-ink">
                 Admin workspace
@@ -183,7 +186,7 @@ export function AuthPanel() {
 }
 
 function SignedInWorkspace() {
-  const { isAdmin, isLoading } = useAuth();
+  const { hasAdminUiAccess, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -193,7 +196,7 @@ function SignedInWorkspace() {
     );
   }
 
-  if (!isAdmin) {
+  if (!hasAdminUiAccess) {
     return (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
         <UserSummary />
@@ -205,9 +208,9 @@ function SignedInWorkspace() {
             This account is signed in but not on the admin allowlist.
           </h2>
           <p className="mt-4 text-sm leading-6 text-slate-600">
-            CRUD pages are visible only to emails listed in VITE_ADMIN_EMAILS.
-            Database Row-Level Security still controls the final permissions for
-            every Data API request.
+            CRUD pages are hidden unless this public frontend allowlist includes
+            your email. Database Row-Level Security controls the real
+            permissions for every Data API request.
           </p>
         </div>
       </div>

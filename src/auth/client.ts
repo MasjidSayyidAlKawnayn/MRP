@@ -4,7 +4,7 @@ import { BetterAuthReactAdapter } from "@neondatabase/neon-js/auth/react/adapter
 
 const authUrl = import.meta.env.VITE_NEON_AUTH_URL;
 const dataApiUrl = import.meta.env.VITE_NEON_DATA_API_URL;
-const adminEmailValue = import.meta.env.VITE_ADMIN_EMAILS;
+const adminUiEmailValue = import.meta.env.VITE_ADMIN_EMAILS;
 
 const isValidAuthUrl = Boolean(
   authUrl &&
@@ -19,8 +19,8 @@ const isValidDataApiUrl = Boolean(
   new URL(dataApiUrl).protocol.startsWith("http"),
 );
 
-export const adminEmails =
-  adminEmailValue
+export const adminUiEmails =
+  adminUiEmailValue
     ?.split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean) ?? [];
@@ -37,23 +37,21 @@ if (!isValidDataApiUrl) {
   );
 }
 
-if (adminEmails.length === 0) {
+if (adminUiEmails.length === 0) {
   console.warn(
-    "Missing VITE_ADMIN_EMAILS. CRUD pages require at least one admin email.",
+    "Missing VITE_ADMIN_EMAILS. The frontend will hide the CRUD workspace until a UI allowlist is configured.",
   );
 }
 
 export const configStatus = {
   hasAuthConfig: isValidAuthUrl,
   hasDataApiConfig: isValidDataApiUrl,
-  hasAdminEmails: adminEmails.length > 0,
+  hasAdminUiEmails: adminUiEmails.length > 0,
 };
 
 export const hasAuthConfig = configStatus.hasAuthConfig;
 export const hasAppConfig =
-  configStatus.hasAuthConfig &&
-  configStatus.hasDataApiConfig &&
-  configStatus.hasAdminEmails;
+  configStatus.hasAuthConfig && configStatus.hasDataApiConfig;
 
 export const neonClient = createClient({
   auth: {

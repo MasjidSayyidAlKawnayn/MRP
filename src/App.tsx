@@ -1,5 +1,6 @@
 import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { NeonAuthUIProvider } from "@neondatabase/neon-js/auth/react/ui";
+import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
 import { AuthProvider } from "./auth/AuthContext";
 import { AuthPanel } from "./components/AuthPanel";
 import { authClient, configStatus, hasAppConfig } from "./auth/client";
@@ -9,6 +10,8 @@ const trimmedBasePath = appBasePath.endsWith("/")
   ? appBasePath.slice(0, -1)
   : appBasePath;
 const authBasePath = `${trimmedBasePath}/auth`;
+
+const appName = "\u0645\u0646\u0635\u0629 \u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u0645\u0633\u062C\u062F";
 
 function updateUrl(href: string, mode: "push" | "replace") {
   if (/^(https?:|mailto:|tel:)/i.test(href)) {
@@ -63,34 +66,45 @@ function AuthLink({
 export default function App() {
   if (!hasAppConfig) {
     return (
-      <main className="min-h-screen bg-paper text-ink">
-        <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-5 py-8 sm:px-8">
-          <p className="text-sm font-semibold uppercase tracking-wide text-cedar">
-            MRP frontend
-          </p>
-          <h1 className="mt-4 text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-            MRP frontend is not configured.
-          </h1>
-          <p className="mt-5 text-lg leading-8 text-slate-700">
-            Set the required Neon Auth, Neon Data API, and admin allowlist
-            environment variables before starting or deploying this app.
-          </p>
-          <ul className="mt-6 space-y-3 text-sm text-slate-700">
-            <li>
-              <strong>VITE_NEON_AUTH_URL:</strong>{" "}
-              {configStatus.hasAuthConfig ? "configured" : "missing or invalid"}
-            </li>
-            <li>
-              <strong>VITE_NEON_DATA_API_URL:</strong>{" "}
-              {configStatus.hasDataApiConfig
-                ? "configured"
-                : "missing or invalid"}
-            </li>
-            <li>
-              <strong>VITE_ADMIN_EMAILS:</strong>{" "}
-              {configStatus.hasAdminEmails ? "configured" : "missing"}
-            </li>
-          </ul>
+      <main dir="rtl" className="min-h-screen bg-paper text-ink">
+        <div className="masjid-pattern mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-5 py-8 sm:px-8">
+          <div className="relative rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-2xl shadow-cedar/10 backdrop-blur md:p-10">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full bg-cedar/10 px-4 py-2 text-sm font-bold text-cedar">
+                  <Settings2 className="h-4 w-4" aria-hidden="true" />
+                  {appName}
+                </div>
+                <h1 className="mt-5 text-3xl font-bold leading-tight text-ink sm:text-5xl">
+                  {"\u064A\u0644\u0632\u0645 \u0625\u0643\u0645\u0627\u0644 \u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0642\u0628\u0644 \u062A\u0634\u063A\u064A\u0644 \u0627\u0644\u0645\u0646\u0635\u0629."}
+                </h1>
+                <p className="mt-5 text-base leading-8 text-slate-700 sm:text-lg">
+                  {"\u062A\u0623\u0643\u062F \u0645\u0646 \u0636\u0628\u0637 \u0625\u0639\u062F\u0627\u062F\u0627\u062A Neon Auth \u0648\u0648\u0627\u062C\u0647\u0629 \u0628\u064A\u0627\u0646\u0627\u062A Neon \u0648\u0642\u0627\u0626\u0645\u0629 \u0645\u062F\u064A\u0631\u064A \u0627\u0644\u0646\u0638\u0627\u0645 \u062D\u062A\u0649 \u062A\u0639\u0645\u0644 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0625\u062F\u0627\u0631\u0629 \u0628\u0623\u0645\u0627\u0646."}
+                </p>
+              </div>
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-saffron/15 text-saffron">
+                <AlertTriangle className="h-8 w-8" aria-hidden="true" />
+              </div>
+            </div>
+
+            <ul className="mt-8 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
+              <ConfigItem
+                label={"\u0631\u0627\u0628\u0637 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644"}
+                name="VITE_NEON_AUTH_URL"
+                ok={configStatus.hasAuthConfig}
+              />
+              <ConfigItem
+                label={"\u0631\u0627\u0628\u0637 \u0648\u0627\u062C\u0647\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A"}
+                name="VITE_NEON_DATA_API_URL"
+                ok={configStatus.hasDataApiConfig}
+              />
+              <ConfigItem
+                label={"\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062F\u064A\u0631\u064A\u0646"}
+                name="VITE_ADMIN_EMAILS"
+                ok={configStatus.hasAdminUiEmails}
+              />
+            </ul>
+          </div>
         </div>
       </main>
     );
@@ -111,12 +125,55 @@ export default function App() {
       replace={(href) => updateUrl(href, "replace")}
     >
       <AuthProvider>
-        <main className="min-h-screen bg-paper text-ink">
+        <main dir="rtl" className="min-h-screen bg-paper text-ink">
           <div className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:py-12">
-            <AuthPanel />
+            <AuthPanel appName={appName} />
           </div>
         </main>
       </AuthProvider>
     </NeonAuthUIProvider>
+  );
+}
+
+function ConfigItem({
+  label,
+  name,
+  ok,
+}: {
+  label: string;
+  name: string;
+  ok: boolean;
+}) {
+  return (
+    <li className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span
+          className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full ${
+            ok ? "bg-cedar/10 text-cedar" : "bg-red-50 text-red-700"
+          }`}
+        >
+          {ok ? (
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+          )}
+        </span>
+        <span>
+          <span className="block font-bold text-ink">{label}</span>
+          <span className="mt-1 block break-all text-xs text-slate-500">
+            {name}
+          </span>
+          <span
+            className={`mt-2 block text-xs font-bold ${
+              ok ? "text-cedar" : "text-red-700"
+            }`}
+          >
+            {ok
+              ? "\u0645\u0636\u0628\u0648\u0637"
+              : "\u0645\u0641\u0642\u0648\u062F \u0623\u0648 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D"}
+          </span>
+        </span>
+      </div>
+    </li>
   );
 }
