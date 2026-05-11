@@ -75,3 +75,41 @@ a:focus-visible {
 .neon-auth-ui {
   direction: rtl;
 }
+
+.group-color-row {
+  background-color: color-mix(in srgb, var(--group-color-light) 14%, transparent);
+}
+
+.group-color-row:hover {
+  background-color: color-mix(in srgb, var(--group-color-light) 24%, transparent);
+}
+
+.group-color-chip {
+  background-color: color-mix(in srgb, var(--group-color-light) 18%, white);
+  border-color: color-mix(in srgb, var(--group-color-light) 36%, white);
+  color: color-mix(in srgb, var(--group-color-light) 54%, #0f172a);
+}
+
+.group-color-marker {
+  background-color: var(--group-color-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  .group-color-row {
+    background-color: color-mix(in srgb, var(--group-color-dark) 16%, transparent);
+  }
+
+  .group-color-row:hover {
+    background-color: color-mix(in srgb, var(--group-color-dark) 28%, transparent);
+  }
+
+  .group-color-chip {
+    background-color: color-mix(in srgb, var(--group-color-dark) 18%, #0f172a);
+    border-color: color-mix(in srgb, var(--group-color-dark) 42%, #0f172a);
+    color: color-mix(in srgb, var(--group-color-dark) 62%, white);
+  }
+
+  .group-color-marker {
+    background-color: var(--group-color-dark);
+  }
+}

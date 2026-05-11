@@ -43,13 +43,19 @@ export function dashboardPath({
   entity,
   mode = "list",
   rowId,
+  subpage,
 }: {
   schema: SchemaName;
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
+  subpage?: "take";
 }) {
   const basePath = `/dashboard/${schema}/${entity}`;
+
+  if (subpage === "take") {
+    return `${basePath}/take`;
+  }
 
   if (mode === "create") {
     return `${basePath}/new`;

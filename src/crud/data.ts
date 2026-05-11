@@ -206,5 +206,9 @@ export function getInitialValue(
     return false;
   }
 
+  if (field.key === "colorCode") {
+    return "#fecdd3,#be123c";
+  }
+
   return null;
 }

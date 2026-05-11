@@ -1,20 +1,32 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   BookOpen,
   CalendarCheck,
   CheckCircle2,
+  Clock3,
   Database,
   Eye,
   FileText,
   GraduationCap,
+  Layers3,
+  ListChecks,
   Loader2,
+  Menu,
   Pencil,
   Plus,
   RefreshCw,
   Save,
   Search,
   Trash2,
+  UserCheck,
   UserRound,
   UsersRound,
   X,
@@ -141,48 +153,86 @@ function searchTermMatchesText(term: string, text: string) {
     );
 }
 
-const groupColorClasses = [
-  {
+const groupColorClasses = {
+  rose: {
     row: "bg-rose-50/70 hover:bg-rose-100/75",
     chip: "border-rose-200 bg-rose-100 text-rose-800",
     marker: "bg-rose-500",
   },
-  {
+  sky: {
     row: "bg-sky-50/70 hover:bg-sky-100/75",
     chip: "border-sky-200 bg-sky-100 text-sky-800",
     marker: "bg-sky-500",
   },
-  {
+  lime: {
     row: "bg-lime-50/75 hover:bg-lime-100/80",
     chip: "border-lime-300 bg-lime-100 text-lime-800",
     marker: "bg-lime-600",
   },
-  {
+  indigo: {
     row: "bg-indigo-50/65 hover:bg-indigo-100/70",
     chip: "border-indigo-200 bg-indigo-100 text-indigo-800",
     marker: "bg-indigo-500",
   },
-  {
+  violet: {
     row: "bg-violet-50/60 hover:bg-violet-100/70",
     chip: "border-violet-200 bg-violet-100 text-violet-800",
     marker: "bg-violet-500",
   },
-  {
+  teal: {
     row: "bg-teal-50/70 hover:bg-teal-100/75",
     chip: "border-teal-200 bg-teal-100 text-teal-800",
     marker: "bg-teal-500",
   },
-  {
+  orange: {
     row: "bg-orange-50/65 hover:bg-orange-100/70",
     chip: "border-orange-200 bg-orange-100 text-orange-800",
     marker: "bg-orange-500",
   },
-  {
+  cyan: {
     row: "bg-cyan-50/70 hover:bg-cyan-100/75",
     chip: "border-cyan-200 bg-cyan-100 text-cyan-800",
     marker: "bg-cyan-500",
   },
-] as const;
+} as const;
+
+type GroupColorCode = keyof typeof groupColorClasses;
+type GroupColorDisplay = {
+  row: string;
+  chip: string;
+  marker: string;
+  style?: CSSProperties;
+};
+
+const hexColorPattern = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function getCustomGroupColorStyle(lightColor: string, darkColor: string) {
+  return {
+    "--group-color-light": lightColor,
+    "--group-color-dark": darkColor,
+  } as CSSProperties;
+}
+
+function getCustomGroupColorByCode(value: string): GroupColorDisplay | null {
+  const [lightColor, darkColor, ...extraColors] = value
+    .split(",")
+    .map((color) => color.trim());
+
+  if (
+    extraColors.length > 0 ||
+    !hexColorPattern.test(lightColor ?? "") ||
+    !hexColorPattern.test(darkColor ?? "")
+  ) {
+    return null;
+  }
+
+  return {
+    row: "group-color-row",
+    chip: "group-color-chip",
+    marker: "group-color-marker",
+    style: getCustomGroupColorStyle(lightColor, darkColor),
+  };
+}
 
 const ui = {
   crudPages: "\u0623\u0642\u0633\u0627\u0645 \u0627\u0644\u0645\u0646\u0635\u0629",
@@ -276,18 +326,52 @@ function toInputValue(value: CrudValue, field: FieldDefinition) {
   return String(value);
 }
 
+function getTodayDateString() {
+  const now = new Date();
+  const offsetDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return offsetDate.toISOString().slice(0, 10);
+}
+
+function getInitialFormValue(
+  entity: EntityDefinition,
+  field: FieldDefinition,
+  row?: CrudRow,
+) {
+  const value = row?.[field.key];
+
+  if (value !== undefined) {
+    return value;
+  }
+
+  if (entity.table === "attendance_sessions") {
+    const today = getTodayDateString();
+
+    if (field.key === "sessionDate" || field.key === "label") {
+      return today;
+    }
+
+    if (field.key === "sequenceOnDate") {
+      return 1;
+    }
+  }
+
+  return getInitialValue(field, row);
+}
+
 function getField(entity: EntityDefinition, key: string) {
   return entity.fields.find((field) => field.key === key);
 }
 
-function getGroupColor(value: CrudValue | undefined) {
-  const text = formatValue(value);
-  const hash = Array.from(text).reduce(
-    (total, character) => total + character.charCodeAt(0),
-    0,
-  );
+function getGroupColorByCode(value: CrudValue | undefined): GroupColorDisplay | null {
+  if (typeof value !== "string") {
+    return null;
+  }
 
-  return groupColorClasses[hash % groupColorClasses.length];
+  return (
+    groupColorClasses[value as GroupColorCode] ??
+    getCustomGroupColorByCode(value) ??
+    null
+  );
 }
 
 function getRelatedRow(
@@ -309,6 +393,98 @@ function getRelatedRow(
       (row) => String(row.id) === String(value),
     ) ?? null
   );
+}
+
+function getGroupRowForRecord(
+  activeEntityKey: EntityKey,
+  row: CrudRow,
+  activeSchema: SchemaName,
+  relationOptions: RelationOptions,
+) {
+  const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
+
+  if (activeEntityKey === "groups") {
+    return row;
+  }
+
+  if (activeEntityKey === "students") {
+    return (
+      groups.find((group) => String(group.id) === String(row.groupId)) ?? null
+    );
+  }
+
+  if (activeEntityKey === "teachers") {
+    return groups.find((group) => group.name === row.group) ?? null;
+  }
+
+  return null;
+}
+
+function getStudentName(student: CrudRow | null | undefined) {
+  if (!student) {
+    return ui.none;
+  }
+
+  return [student.firstName, student.lastName]
+    .map((part) => formatValue(part))
+    .filter((part) => part !== ui.none)
+    .join(" ");
+}
+
+function getSessionTime(session: CrudRow | null | undefined) {
+  return formatValue(session?.sessionDate ?? session?.label ?? session?.id);
+}
+
+function sortSessionsNewestFirst(sessions: CrudRow[]) {
+  return [...sessions].sort((left, right) => {
+    const leftTime = Date.parse(String(left.sessionDate ?? ""));
+    const rightTime = Date.parse(String(right.sessionDate ?? ""));
+
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+      return rightTime - leftTime;
+    }
+
+    return Number(right.id ?? 0) - Number(left.id ?? 0);
+  });
+}
+
+function getDefaultAttendanceSession(sessions: CrudRow[]) {
+  const today = getTodayDateString();
+  return (
+    sessions.find(
+      (session) =>
+        String(session.sessionDate ?? "").slice(0, 10) === today ||
+        String(session.label ?? "").includes(today),
+    ) ??
+    sessions[0] ??
+    null
+  );
+}
+
+function getStatusLabel(status: CrudValue | undefined) {
+  return status === "late" ? "متأخر" : "حاضر";
+}
+
+function getStatusClasses(status: CrudValue | undefined) {
+  return status === "late"
+    ? "border-amber-200 bg-amber-50 text-amber-800"
+    : "border-emerald-200 bg-emerald-50 text-emerald-800";
+}
+
+function searchRows<T extends CrudRow>(rows: T[], term: string, getText: (row: T) => string) {
+  const normalizedSearch = normalizeSearchText(term);
+
+  if (!normalizedSearch) {
+    return rows;
+  }
+
+  const terms = normalizedSearch.split(" ");
+  return rows.filter((row) => {
+    const searchableText = normalizeSearchText(getText(row));
+    return terms.every((searchTerm) =>
+      searchTermMatchesText(searchTerm, searchableText),
+    );
+  });
 }
 
 function getRelationLabel(
@@ -374,31 +550,57 @@ function formatFieldValue(
 
 function EntityNav({
   activeEntityId,
+  activeSchema,
   entityDefinitions,
+  isOpen,
+  onClose,
   onSelect,
+  onSelectAttendanceTaking,
 }: {
   activeEntityId: EntityId;
+  activeSchema: SchemaName;
   entityDefinitions: EntityDefinition[];
+  isOpen: boolean;
+  onClose: () => void;
   onSelect: (entityId: EntityId) => void;
+  onSelectAttendanceTaking: () => void;
 }) {
   return (
-    <aside className="min-w-0 overflow-hidden rounded-3xl border border-white/70 bg-white/85 p-3 shadow-xl shadow-cedar/5 backdrop-blur sm:p-4">
-      <h2 className="px-2 text-xs font-bold text-slate-500">{ui.crudPages}</h2>
-      <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 lg:mt-4 lg:grid lg:overflow-visible lg:pb-0">
+    <aside
+      className={`fixed inset-y-0 right-0 z-[80] w-72 max-w-[82vw] overflow-y-auto border-l border-white/70 bg-white/95 p-4 shadow-2xl shadow-slate-900/20 backdrop-blur transition-transform duration-200 ${
+        isOpen ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="px-1 text-sm font-bold text-slate-500">{ui.crudPages}</h2>
+        <button
+          aria-label={ui.cancel}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+          onClick={onClose}
+          title={ui.cancel}
+          type="button"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="mt-4 grid max-w-full gap-2">
         {entityDefinitions
           .filter((entity) => entity.showInNav !== false)
           .map((entity) => {
             const Icon = entityIcons[getEntityKey(entity.id)] ?? Database;
 
             return (
+              <div className="grid gap-1" key={entity.id}>
               <button
-                className={`flex min-h-14 min-w-[11rem] shrink-0 items-center gap-3 rounded-2xl px-3 py-2 text-right text-sm font-bold transition lg:min-w-0 lg:shrink ${
+                className={`flex min-h-14 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
                   entity.id === activeEntityId
                     ? "bg-cedar text-white shadow-lg shadow-cedar/25"
                     : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
                 }`}
-                key={entity.id}
-                onClick={() => onSelect(entity.id)}
+                onClick={() => {
+                  onSelect(entity.id);
+                  onClose();
+                }}
                 type="button"
               >
                 <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
@@ -409,6 +611,25 @@ function EntityNav({
                   </span>
                 </span>
               </button>
+              {entity.id === `${activeSchema}.attendanceRecords` ? (
+                <button
+                  className="mr-8 flex min-h-12 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold text-slate-600 transition hover:bg-cedar/5 hover:text-cedar"
+                  onClick={() => {
+                    onSelectAttendanceTaking();
+                    onClose();
+                  }}
+                  type="button"
+                >
+                  <ListChecks className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate">تسجيل الحضور</span>
+                    <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                      صفحة مستقلة
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+              </div>
             );
           })}
       </div>
@@ -445,7 +666,7 @@ function EntityForm({
     Object.fromEntries(
       fields.map((field) => [
         field.key,
-        draft?.[field.key] ?? getInitialValue(field, row),
+        draft?.[field.key] ?? getInitialFormValue(entity, field, row),
       ]),
     ),
   );
@@ -457,11 +678,11 @@ function EntityForm({
       Object.fromEntries(
         fields.map((field) => [
           field.key,
-          draft?.[field.key] ?? getInitialValue(field, row),
+          draft?.[field.key] ?? getInitialFormValue(entity, field, row),
         ]),
       ),
     );
-  }, [draft, fields, row]);
+  }, [draft, entity, fields, row]);
 
   function updateField(field: FieldDefinition, value: string) {
     setValues((current) => {
@@ -743,9 +964,538 @@ export function SchemaSettingsPage({
   );
 }
 
+type AttendanceWorkspaceMode = "student" | "group" | "taking" | "records";
+
+function AttendanceWorkspace({
+  activeSchema,
+  attendanceEntity,
+  isLoading,
+  isTakingPage,
+  onMarkAttendance,
+  onNavigateRecord,
+  onNavigateStudent,
+  onOpenTakingPage,
+  onRefresh,
+  records,
+  relationOptions,
+}: {
+  activeSchema: SchemaName;
+  attendanceEntity: EntityDefinition;
+  isLoading: boolean;
+  isTakingPage: boolean;
+  onMarkAttendance: (
+    studentId: CrudValue,
+    sessionId: CrudValue,
+    status: "present" | "late",
+    existingRecord?: CrudRow,
+  ) => Promise<void>;
+  onNavigateRecord: (row: CrudRow, mode: "detail" | "edit") => void;
+  onNavigateStudent: (student: CrudRow) => void;
+  onOpenTakingPage: () => void;
+  onRefresh: () => void;
+  records: CrudRow[];
+  relationOptions: RelationOptions;
+}) {
+  const [viewMode, setViewMode] = useState<AttendanceWorkspaceMode>(
+    isTakingPage ? "taking" : "student",
+  );
+  const [studentSearch, setStudentSearch] = useState("");
+  const [groupSearch, setGroupSearch] = useState("");
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState<CrudValue | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<CrudValue | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<CrudValue | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
+  const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
+  const sessions = sortSessionsNewestFirst(
+    relationOptions[`${activeSchema}.attendanceSessions` as EntityId] ?? [],
+  );
+  const availableModes = isTakingPage
+    ? ([{ key: "taking", label: "تسجيل سريع", icon: ListChecks }] as const)
+    : ([
+        { key: "student", label: "الطالب", icon: UserCheck },
+        { key: "group", label: "المجموعة", icon: Layers3 },
+        { key: "records", label: "كل السجلات", icon: Database },
+      ] as const);
+
+  useEffect(() => {
+    setViewMode(isTakingPage ? "taking" : "student");
+  }, [isTakingPage]);
+
+  const selectedStudent =
+    students.find((student) => String(student.id) === String(selectedStudentId)) ??
+    students[0] ??
+    null;
+  const selectedGroup =
+    groups.find((group) => String(group.id) === String(selectedGroupId)) ??
+    groups.find((group) =>
+      students.some((student) => String(student.groupId) === String(group.id)),
+    ) ??
+    groups[0] ??
+    null;
+  const selectedSession =
+    sessions.find((session) => String(session.id) === String(selectedSessionId)) ??
+    getDefaultAttendanceSession(sessions) ??
+    null;
+
+  useEffect(() => {
+    if (!selectedStudentId && students[0]?.id !== undefined) {
+      setSelectedStudentId(students[0].id);
+    }
+  }, [selectedStudentId, students]);
+
+  useEffect(() => {
+    if (!selectedGroupId && selectedGroup?.id !== undefined) {
+      setSelectedGroupId(selectedGroup.id);
+    }
+  }, [selectedGroup, selectedGroupId]);
+
+  useEffect(() => {
+    const defaultSession = getDefaultAttendanceSession(sessions);
+
+    if (!selectedSessionId && defaultSession?.id !== undefined) {
+      setSelectedSessionId(defaultSession.id);
+    }
+  }, [selectedSessionId, sessions]);
+
+  const recordsByStudent = useMemo(() => {
+    const grouped = new Map<string, CrudRow[]>();
+
+    records.forEach((record) => {
+      const key = String(record.studentId);
+      grouped.set(key, [...(grouped.get(key) ?? []), record]);
+    });
+
+    return grouped;
+  }, [records]);
+
+  const filteredStudents = searchRows(students, studentSearch, (student) => {
+    const group = groups.find((currentGroup) => String(currentGroup.id) === String(student.groupId));
+    return [
+      student.id,
+      student.firstName,
+      student.lastName,
+      student.phone,
+      student.fatherPhone,
+      student.motherPhone,
+      group?.name,
+    ].join(" ");
+  });
+
+  const filteredGroups = searchRows(groups, groupSearch, (group) =>
+    [group.id, group.name, group.colorCode].join(" "),
+  );
+
+  const groupStudents = students.filter(
+    (student) => String(student.groupId) === String(selectedGroup?.id),
+  );
+  const visibleRosterStudents = searchRows(groupStudents, rosterSearch, (student) =>
+    [student.id, student.firstName, student.lastName, student.phone].join(" "),
+  );
+  const selectedStudentRecords = (recordsByStudent.get(String(selectedStudent?.id)) ?? [])
+    .map((record) => ({
+      record,
+      session:
+        sessions.find((session) => String(session.id) === String(record.attendanceSessionId)) ??
+        null,
+    }))
+    .sort((left, right) => {
+      const leftTime = Date.parse(String(left.session?.sessionDate ?? ""));
+      const rightTime = Date.parse(String(right.session?.sessionDate ?? ""));
+      return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+    });
+  const presentCount = selectedStudentRecords.filter(({ record }) => record.status === "present").length;
+  const lateCount = selectedStudentRecords.filter(({ record }) => record.status === "late").length;
+  const missingCount = Math.max(0, sessions.length - selectedStudentRecords.length);
+
+  async function handleMark(
+    studentId: CrudValue,
+    sessionId: CrudValue,
+    status: "present" | "late",
+    existingRecord?: CrudRow,
+  ) {
+    const key = `${studentId}-${sessionId}-${status}`;
+    setSavingKey(key);
+
+    try {
+      await onMarkAttendance(studentId, sessionId, status, existingRecord);
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  const groupColor = getGroupColorByCode(selectedGroup?.colorCode);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-xl shadow-cedar/5">
+      <div className="border-b border-slate-200/80 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-cedar">لوحة حضور سريعة</p>
+            <h2 className="mt-1 text-xl font-bold text-ink sm:text-2xl">
+              مركز سجلات الحضور
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 text-xs font-bold sm:flex">
+            {[
+              ...availableModes,
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = viewMode === item.key;
+
+              return (
+                <button
+                  className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-3 transition ${
+                    isActive
+                      ? "bg-white text-cedar shadow-sm"
+                      : "text-slate-600 hover:bg-white/70"
+                  }`}
+                  key={item.key}
+                  onClick={() => setViewMode(item.key as AttendanceWorkspaceMode)}
+                  type="button"
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {!isTakingPage ? (
+            <button
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-cedar px-3 text-sm font-bold text-white shadow-lg shadow-cedar/15 transition hover:bg-palm"
+              onClick={onOpenTakingPage}
+              type="button"
+            >
+              <ListChecks className="h-4 w-4" aria-hidden="true" />
+              تسجيل الحضور
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {viewMode === "student" ? (
+        <div className="grid gap-4 p-3 lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)] lg:p-4">
+          <div className="space-y-3">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <input
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
+                onChange={(event) => setStudentSearch(event.target.value)}
+                placeholder="بحث سريع عن طالب"
+                type="search"
+                value={studentSearch}
+              />
+            </label>
+            <div className="max-h-80 space-y-2 overflow-y-auto pe-1">
+              {filteredStudents.map((student) => {
+                const studentGroup = groups.find((group) => String(group.id) === String(student.groupId));
+                const color = getGroupColorByCode(studentGroup?.colorCode);
+                const isSelected = String(student.id) === String(selectedStudent?.id);
+
+                return (
+                  <button
+                    className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-right transition ${
+                      isSelected
+                        ? "border-cedar bg-cedar/5 shadow-sm"
+                        : "border-slate-200 bg-white hover:border-cedar/40"
+                    }`}
+                    key={String(student.id)}
+                    onClick={() => setSelectedStudentId(student.id)}
+                    type="button"
+                  >
+                    <span className={`h-10 w-1.5 rounded-full ${color?.marker ?? "bg-slate-300"}`} style={color?.style} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-bold text-ink">{getStudentName(student)}</span>
+                      <span className="mt-0.5 block truncate text-xs text-slate-500">
+                        #{formatValue(student.id)} · {formatValue(studentGroup?.name)}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            {selectedStudent ? (
+              <>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-xl font-bold text-ink">{getStudentName(selectedStudent)}</h3>
+                    <p className="mt-1 text-sm text-slate-500">#{formatValue(selectedStudent.id)}</p>
+                  </div>
+                  <button
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-cedar px-3 text-sm font-bold text-white shadow-lg shadow-cedar/15 transition hover:bg-palm"
+                    onClick={() => onNavigateStudent(selectedStudent)}
+                    type="button"
+                  >
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                    ملف الطالب
+                  </button>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    ["الجلسات", sessions.length],
+                    ["حاضر", presentCount],
+                    ["متأخر", lateCount],
+                    ["بدون سجل", missingCount],
+                  ].map(([label, value]) => (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3" key={label}>
+                      <p className="text-xs font-bold text-slate-500">{label}</p>
+                      <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {selectedStudentRecords.length ? (
+                    selectedStudentRecords.slice(0, 10).map(({ record, session }) => (
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2" key={String(record.id)}>
+                        <span className="min-w-0">
+                          <span className="block truncate font-bold text-ink">{getSessionTime(session)}</span>
+                          <span className="block text-xs text-slate-500">{formatValue(session?.label)}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <span className={`rounded-full border px-2 py-1 text-xs font-bold ${getStatusClasses(record.status)}`}>
+                            {getStatusLabel(record.status)}
+                          </span>
+                          <ActionButton compact icon={Eye} label={ui.view} onClick={() => onNavigateRecord(record, "detail")} />
+                          <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => onNavigateRecord(record, "edit")} />
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+                      لا توجد سجلات لهذا الطالب بعد.
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="p-4 text-sm text-slate-500">{ui.noRecords}</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {viewMode === "group" ? (
+        <div className="grid gap-4 p-3 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)] lg:p-4">
+          <div className="space-y-3">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <input
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
+                onChange={(event) => setGroupSearch(event.target.value)}
+                placeholder="بحث عن مجموعة"
+                type="search"
+                value={groupSearch}
+              />
+            </label>
+            <div className="space-y-2">
+              {filteredGroups.map((group) => {
+                const color = getGroupColorByCode(group.colorCode);
+                const isSelected = String(group.id) === String(selectedGroup?.id);
+                const count = students.filter((student) => String(student.groupId) === String(group.id)).length;
+
+                return (
+                  <button
+                    className={`w-full rounded-2xl border px-3 py-2 text-right transition ${color?.row ?? "bg-white hover:bg-slate-50"} ${
+                      isSelected ? "border-cedar shadow-sm" : "border-slate-200"
+                    }`}
+                    key={String(group.id)}
+                    onClick={() => setSelectedGroupId(group.id)}
+                    style={color?.style}
+                    type="button"
+                  >
+                    <span className={`inline-flex max-w-full items-center gap-2 rounded-full border px-2 py-1 text-sm font-bold ${color?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`} style={color?.style}>
+                      <span className={`h-2.5 w-2.5 rounded-full ${color?.marker ?? "bg-slate-400"}`} style={color?.style} />
+                      <span className="truncate">{formatValue(group.name)}</span>
+                    </span>
+                    <span className="mt-2 block text-xs text-slate-500">{count} طالب</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="min-w-0 truncate text-xl font-bold text-ink">{formatValue(selectedGroup?.name)}</h3>
+              <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-bold ${groupColor?.chip ?? "border-slate-200 bg-white text-slate-700"}`} style={groupColor?.style}>
+                {groupStudents.length} طالب
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+              {groupStudents.map((student) => {
+                const studentRecords = recordsByStudent.get(String(student.id)) ?? [];
+                const studentPresent = studentRecords.filter((record) => record.status === "present").length;
+                const studentLate = studentRecords.filter((record) => record.status === "late").length;
+
+                return (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3" key={String(student.id)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-ink">{getStudentName(student)}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">#{formatValue(student.id)}</p>
+                      </div>
+                      <ActionButton compact icon={Eye} label={ui.view} onClick={() => onNavigateStudent(student)} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-1 text-center text-xs font-bold">
+                      <span className="rounded-xl bg-emerald-50 px-2 py-1 text-emerald-800">حاضر {studentPresent}</span>
+                      <span className="rounded-xl bg-amber-50 px-2 py-1 text-amber-800">متأخر {studentLate}</span>
+                      <span className="rounded-xl bg-slate-100 px-2 py-1 text-slate-700">سجل {studentRecords.length}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewMode === "taking" ? (
+        <div className="space-y-4 p-3 lg:p-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="text-sm font-bold text-slate-700">
+              جلسة الحضور
+              <select
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                onChange={(event) => setSelectedSessionId(event.target.value)}
+                value={String(selectedSession?.id ?? "")}
+              >
+                {sessions.map((session) => (
+                  <option key={String(session.id)} value={String(session.id)}>
+                    {getSessionTime(session)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-bold text-slate-700">
+              المجموعة
+              <div className="mt-2 flex gap-2 overflow-x-auto rounded-xl bg-slate-100 p-1">
+                {groups.map((group) => {
+                  const color = getGroupColorByCode(group.colorCode);
+                  const isSelected = String(group.id) === String(selectedGroup?.id);
+
+                  return (
+                    <button
+                      aria-pressed={isSelected}
+                      className={`inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition ${
+                        isSelected
+                          ? `${color?.chip ?? "border-cedar bg-white text-cedar"} shadow-sm`
+                          : "border-transparent bg-transparent text-slate-600 hover:bg-white/70"
+                      }`}
+                      key={String(group.id)}
+                      onClick={() => setSelectedGroupId(group.id)}
+                      style={isSelected ? color?.style : undefined}
+                      type="button"
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${color?.marker ?? "bg-slate-400"}`}
+                        style={color?.style}
+                      />
+                      <span className="max-w-32 truncate">{formatValue(group.name)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </label>
+            <label className="relative block text-sm font-bold text-slate-700">
+              بحث داخل القائمة
+              <Search className="pointer-events-none absolute right-4 top-[2.65rem] h-4 w-4 text-slate-400" aria-hidden="true" />
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
+                onChange={(event) => setRosterSearch(event.target.value)}
+                placeholder="اسم الطالب أو رقمه"
+                type="search"
+                value={rosterSearch}
+              />
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            {visibleRosterStudents.map((student) => {
+              const existingRecord = records.find(
+                (record) =>
+                  String(record.studentId) === String(student.id) &&
+                  String(record.attendanceSessionId) === String(selectedSession?.id),
+              );
+              const currentStatus = existingRecord?.status;
+
+              return (
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between" key={String(student.id)}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className={`h-11 w-1.5 rounded-full ${groupColor?.marker ?? "bg-slate-300"}`} style={groupColor?.style} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-bold text-ink">{getStudentName(student)}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        #{formatValue(student.id)} · {currentStatus ? getStatusLabel(currentStatus) : "لم يسجل"}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:w-56">
+                    {(["present", "late"] as const).map((status) => {
+                      const isSelected = currentStatus === status;
+                      const key = `${student.id}-${selectedSession?.id}-${status}`;
+
+                      return (
+                        <button
+                          className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-bold transition ${
+                            isSelected
+                              ? getStatusClasses(status)
+                              : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-cedar/5 hover:text-cedar"
+                          }`}
+                          disabled={!selectedSession || savingKey === key || isLoading}
+                          key={status}
+                          onClick={() =>
+                            selectedSession
+                              ? void handleMark(student.id, selectedSession.id, status, existingRecord)
+                              : undefined
+                          }
+                          type="button"
+                        >
+                          {savingKey === key ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : status === "present" ? (
+                            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                          ) : (
+                            <Clock3 className="h-4 w-4" aria-hidden="true" />
+                          )}
+                          <span>{getStatusLabel(status)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {viewMode === "records" ? (
+        <div className="flex items-center justify-between gap-3 p-4 text-sm text-slate-600">
+          <span>
+            استخدم الجدول الكامل بالأسفل لإدارة {attendanceEntity.label} مباشرة.
+          </span>
+          <button
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+            onClick={onRefresh}
+            title={ui.refresh}
+            type="button"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function CrudDashboard({
   activeEntityKey,
   activeSchema,
+  attendanceTaking = false,
   mode,
   rowId,
   routeSearch,
@@ -753,6 +1503,7 @@ export function CrudDashboard({
 }: {
   activeEntityKey: EntityKey;
   activeSchema: SchemaName;
+  attendanceTaking?: boolean;
   mode: ViewMode;
   rowId?: string;
   routeSearch: RouteSearch;
@@ -772,19 +1523,27 @@ export function CrudDashboard({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [relationOptions, setRelationOptions] = useState<RelationOptions>({});
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const searchTerm = routeSearch.q ?? "";
   const draft = useMemo(() => decodeDraft(routeSearch.draft), [routeSearch.draft]);
 
   const relationEntityIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          activeEntity.fields
-            .map((field) => field.relation?.entityId)
-            .filter((entityId): entityId is EntityId => Boolean(entityId)),
-        ),
-      ),
-    [activeEntity],
+    () => {
+      const entityIds = activeEntity.fields
+        .map((field) => field.relation?.entityId)
+        .filter((entityId): entityId is EntityId => Boolean(entityId));
+
+      if (activeEntityKey === "teachers") {
+        entityIds.push(`${activeSchema}.groups` as EntityId);
+      }
+
+      if (activeEntityKey === "attendanceRecords") {
+        entityIds.push(`${activeSchema}.groups` as EntityId);
+      }
+
+      return Array.from(new Set(entityIds));
+    },
+    [activeEntity, activeEntityKey, activeSchema],
   );
 
   async function refreshRows(entity = activeEntity) {
@@ -936,6 +1695,25 @@ export function CrudDashboard({
     });
   }
 
+  async function handleMarkAttendance(
+    studentId: CrudValue,
+    sessionId: CrudValue,
+    status: "present" | "late",
+    existingRecord?: CrudRow,
+  ) {
+    if (existingRecord?.id !== undefined && existingRecord.id !== null) {
+      await updateRow(activeEntity, Number(existingRecord.id), { status });
+    } else {
+      await createRow(activeEntity, {
+        studentId,
+        attendanceSessionId: sessionId,
+        status,
+      });
+    }
+
+    await refreshRows();
+  }
+
   function handleRelationDetail(field: FieldDefinition, row: CrudRow) {
     if (!field.relation) {
       return;
@@ -996,7 +1774,17 @@ export function CrudDashboard({
   return (
     <div className="min-w-0 space-y-4 sm:space-y-6">
       <div className="relative z-50 flex min-w-0 items-start justify-between gap-3 px-1">
-        <div className="flex min-w-0 justify-end">
+        <div className="flex min-w-0 items-start gap-2">
+          <button
+            aria-expanded={isSidebarOpen}
+            aria-label={ui.crudPages}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+            onClick={() => setIsSidebarOpen(true)}
+            title={ui.crudPages}
+            type="button"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
           <div className="min-w-0 text-right">
             <p className="text-sm font-bold text-cedar">{ui.adminCrud}</p>
             <h1 className="mt-0.5 truncate text-2xl font-bold text-ink sm:text-3xl">
@@ -1007,19 +1795,40 @@ export function CrudDashboard({
         <div className="shrink-0">{topAccessory}</div>
       </div>
 
-      <div className="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
-        <EntityNav
-          activeEntityId={activeEntity.id}
-          entityDefinitions={entityDefinitions}
-          onSelect={(entityId) => {
-            navigateDashboard({
-              entity: getEntityKey(entityId),
-              search: {},
-            });
-          }}
+      {isSidebarOpen ? (
+        <button
+          aria-label={ui.cancel}
+          className="fixed inset-0 z-[70] cursor-default bg-slate-950/30 backdrop-blur-[1px]"
+          onClick={() => setIsSidebarOpen(false)}
+          type="button"
         />
+      ) : null}
 
-        <section className="min-w-0 space-y-4 sm:space-y-5">
+      <EntityNav
+        activeEntityId={activeEntity.id}
+        activeSchema={activeSchema}
+        entityDefinitions={entityDefinitions}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onSelect={(entityId) => {
+          navigateDashboard({
+            entity: getEntityKey(entityId),
+            search: {},
+          });
+        }}
+        onSelectAttendanceTaking={() => {
+          void navigate({
+            to: dashboardPath({
+              schema: activeSchema,
+              entity: "attendanceRecords",
+              subpage: "take",
+            }),
+            search: {},
+          });
+        }}
+      />
+
+      <section className="min-w-0 space-y-4 sm:space-y-5">
 
         {error ? (
           <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1027,7 +1836,7 @@ export function CrudDashboard({
           </p>
         ) : null}
 
-        {mode === "create" ? (
+        {mode === "create" && activeEntityKey !== "attendanceRecords" ? (
           <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
             <h2 className="mb-5 text-xl font-bold text-ink">
               {ui.create} {activeEntity.singularLabel}
@@ -1045,7 +1854,7 @@ export function CrudDashboard({
           </div>
         ) : null}
 
-        {mode === "edit" && selectedRow ? (
+        {mode === "edit" && selectedRow && activeEntityKey !== "attendanceRecords" ? (
           <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
             <h2 className="mb-5 text-xl font-bold text-ink">
               {ui.edit} {getRowLabel(activeEntity, selectedRow)}
@@ -1085,6 +1894,44 @@ export function CrudDashboard({
           />
         ) : null}
 
+        {activeEntityKey === "attendanceRecords" ? (
+          <AttendanceWorkspace
+            activeSchema={activeSchema}
+            attendanceEntity={activeEntity}
+            isTakingPage={attendanceTaking}
+            isLoading={isLoading}
+            onMarkAttendance={handleMarkAttendance}
+            onNavigateRecord={(row, nextMode) =>
+              navigateDashboard({
+                mode: nextMode,
+                rowId: row.id,
+              })
+            }
+            onNavigateStudent={(student) =>
+              navigateDashboard({
+                entity: "students",
+                mode: "detail",
+                rowId: student.id,
+                search: {},
+              })
+            }
+            onOpenTakingPage={() =>
+              void navigate({
+                to: dashboardPath({
+                  schema: activeSchema,
+                  entity: "attendanceRecords",
+                  subpage: "take",
+                }),
+                search: {},
+              })
+            }
+            onRefresh={() => void refreshRows()}
+            records={rows}
+            relationOptions={relationOptions}
+          />
+        ) : null}
+
+        {!attendanceTaking ? (
         <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
           <div className="space-y-2 border-b border-slate-200/80 px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
@@ -1104,15 +1951,17 @@ export function CrudDashboard({
                 >
                   <RefreshCw className="h-5 w-5" aria-hidden="true" />
                 </button>
-                <button
-                  aria-label={`${ui.add} ${activeEntity.singularLabel}`}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:h-10 sm:w-10"
-                  onClick={() => navigateDashboard({ mode: "create", search: {} })}
-                  title={`${ui.add} ${activeEntity.singularLabel}`}
-                  type="button"
-                >
-                  <Plus className="h-5 w-5" aria-hidden="true" />
-                </button>
+                {activeEntityKey !== "attendanceRecords" ? (
+                  <button
+                    aria-label={`${ui.add} ${activeEntity.singularLabel}`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:h-10 sm:w-10"
+                    onClick={() => navigateDashboard({ mode: "create", search: {} })}
+                    title={`${ui.add} ${activeEntity.singularLabel}`}
+                    type="button"
+                  >
+                    <Plus className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                ) : null}
               </div>
             </div>
             <label className="relative block w-full">
@@ -1150,7 +1999,7 @@ export function CrudDashboard({
               <table className="w-full table-fixed divide-y divide-slate-200 text-right text-xs sm:text-sm">
                 <thead className="bg-mist/70">
                   <tr>
-                    {activeEntityKey === "students" ? (
+                    {["groups", "students", "teachers"].includes(activeEntityKey) ? (
                       <th className="w-8 px-1.5 py-1 font-bold text-slate-600 sm:px-2">
                         <span className="sr-only">لون المجموعة</span>
                       </th>
@@ -1167,27 +2016,43 @@ export function CrudDashboard({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredRows.map((row) => {
-                    const groupColor =
-                      activeEntityKey === "students"
-                        ? getGroupColor(row.groupId ?? row.group)
-                        : null;
+                    const groupRow = getGroupRowForRecord(
+                      activeEntityKey,
+                      row,
+                      activeSchema,
+                      relationOptions,
+                    );
+                    const groupColor = getGroupColorByCode(groupRow?.colorCode);
+                    const showsGroupColorColumn = [
+                      "groups",
+                      "students",
+                      "teachers",
+                    ].includes(activeEntityKey);
 
                     return (
                       <tr
                         className={`transition ${groupColor?.row ?? "hover:bg-cedar/5"}`}
                         key={String(row.id)}
+                        style={groupColor?.style}
                       >
-                        {groupColor ? (
+                        {showsGroupColorColumn ? (
                           <td className="px-1.5 py-1 sm:px-2">
-                            <span
-                              className={`mx-auto block h-6 w-1.5 rounded-full ${groupColor.marker}`}
-                            />
+                            {groupColor ? (
+                              <span
+                                className={`mx-auto block h-6 w-1.5 rounded-full ${groupColor.marker}`}
+                                style={groupColor.style}
+                              />
+                            ) : null}
                           </td>
                         ) : null}
                         {activeEntity.listFields.map((key) => {
                           const field = getField(activeEntity, key);
                           const isStudentGroup =
                             activeEntityKey === "students" && key === "groupId";
+                          const isGroupName =
+                            activeEntityKey === "groups" && key === "name";
+                          const isGroupColor =
+                            activeEntityKey === "groups" && key === "colorCode";
                           const value = formatFieldValue(
                             field,
                             row[key],
@@ -1200,17 +2065,41 @@ export function CrudDashboard({
                               className="break-words px-1.5 py-1 leading-5 text-slate-700 sm:px-2"
                               key={key}
                             >
-                              {isStudentGroup && field?.relation ? (
+                              {isGroupColor ? (
+                                <span
+                                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                                  style={groupColor?.style}
+                                >
+                                  <span
+                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
+                                    style={groupColor?.style}
+                                  />
+                                  <span className="min-w-0 truncate">{value}</span>
+                                </span>
+                              ) : isStudentGroup && field?.relation ? (
                                 <button
                                   className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold transition hover:shadow-sm sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
                                   onClick={() => handleRelationDetail(field, row)}
+                                  style={groupColor?.style}
                                   type="button"
                                 >
                                   <span
                                     className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
+                                    style={groupColor?.style}
                                   />
                                   <span className="min-w-0 truncate">{value}</span>
                                 </button>
+                              ) : isGroupName ? (
+                                <span
+                                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                                  style={groupColor?.style}
+                                >
+                                  <span
+                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
+                                    style={groupColor?.style}
+                                  />
+                                  <span className="min-w-0 truncate">{value}</span>
+                                </span>
                               ) : (
                                 value
                               )}
@@ -1225,13 +2114,17 @@ export function CrudDashboard({
                                 rowId: row.id,
                               });
                             }} />
-                            <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => {
-                              navigateDashboard({
-                                mode: "edit",
-                                rowId: row.id,
-                              });
-                            }} />
-                            <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
+                            {activeEntityKey !== "attendanceRecords" ? (
+                              <>
+                                <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => {
+                                  navigateDashboard({
+                                    mode: "edit",
+                                    rowId: row.id,
+                                  });
+                                }} />
+                                <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
+                              </>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -1243,8 +2136,8 @@ export function CrudDashboard({
             </>
           )}
         </div>
-        </section>
-      </div>
+        ) : null}
+      </section>
     </div>
   );
 }

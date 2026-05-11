@@ -33,6 +33,11 @@ const dashboardRoute = createRoute({
   path: "/dashboard/$schema/$entity",
 });
 
+const attendanceTakingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/$schema/attendanceRecords/take",
+});
+
 const createRoutePage = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard/$schema/$entity/new",
@@ -84,6 +89,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
     dashboardRoute,
+    attendanceTakingRoute,
     createRoutePage,
     detailRoute,
     editRoute,
