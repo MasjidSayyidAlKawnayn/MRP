@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function () {
+        var path = window.location.pathname;
+        var search = window.location.search;
+        var hash = window.location.hash;
+        var segments = path.split("/").filter(Boolean);
+        var repo = segments.length ? "/" + segments[0] + "/" : "/";
+        var route = path.slice(repo.length - 1);
+        sessionStorage.setItem("mrp:redirect", route + search + hash);
+        window.location.replace(repo);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

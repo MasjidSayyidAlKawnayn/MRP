@@ -3,22 +3,38 @@ import {
   SignedIn,
   SignedOut,
 } from "@neondatabase/neon-js/auth/react/ui";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   CheckCircle2,
+  ChevronDown,
   Clock3,
   KeyRound,
   LayoutDashboard,
   LogOut,
   Mail,
+  Settings2,
   ShieldCheck,
   UserRound,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { CrudDashboard } from "./CrudDashboard";
-
-type WorkspacePage = "dashboard" | "profile";
+import {
+  CrudDashboard,
+  SchemaSettingsPage,
+  getConfiguredSchemas,
+} from "./CrudDashboard";
+import type { EntityKey, SchemaName } from "../crud/entities";
+import {
+  dashboardPath,
+  getDefaultEntityKey,
+  getDefaultSchema,
+  validateEntityKey,
+  validateSchema,
+  type RouteSearch,
+  type ViewMode,
+  type WorkspacePage,
+} from "../routing";
 
 const text = {
   loadingAccount: "\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u062D\u0633\u0627\u0628...",
@@ -39,6 +55,7 @@ const text = {
   workspace: "\u0645\u0633\u0627\u062D\u0629 \u0627\u0644\u0625\u062F\u0627\u0631\u0629",
   dashboard: "\u0644\u0648\u062D\u0629 \u0627\u0644\u0625\u062F\u0627\u0631\u0629",
   profile: "\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A",
+  settings: "\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A",
   profileTitle: "\u0645\u0644\u0641 \u0627\u0644\u062D\u0633\u0627\u0628",
   profileBody:
     "\u062A\u0641\u0627\u0635\u064A\u0644 \u0627\u0644\u0647\u0648\u064A\u0629 \u0648\u0627\u0644\u062C\u0644\u0633\u0629 \u0648\u0635\u0644\u0627\u062D\u064A\u0629 \u0627\u0644\u0648\u0635\u0648\u0644.",
@@ -48,6 +65,66 @@ const text = {
   deniedTitle: "\u0647\u0630\u0627 \u0627\u0644\u062D\u0633\u0627\u0628 \u0645\u0633\u062C\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0644\u0643\u0646\u0647 \u0644\u064A\u0633 \u0636\u0645\u0646 \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062F\u064A\u0631\u064A\u0646.",
   deniedBody: "\u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0625\u062F\u0627\u0631\u0629 \u062A\u0638\u0647\u0631 \u0644\u0644\u062D\u0633\u0627\u0628\u0627\u062A \u0627\u0644\u0645\u0635\u0631\u062D \u0644\u0647\u0627 \u0641\u0642\u0637\u060C \u0648\u062A\u0628\u0642\u0649 \u0635\u0644\u0627\u062D\u064A\u0627\u062A \u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0647\u064A \u0627\u0644\u0645\u0631\u062C\u0639 \u0627\u0644\u0646\u0647\u0627\u0626\u064A.",
 };
+type WorkspaceRouteState = {
+  canonicalPath?: string;
+  entity: EntityKey;
+  mode: ViewMode;
+  page: WorkspacePage;
+  rowId?: string;
+  schema: SchemaName;
+  search: RouteSearch;
+};
+
+function getWorkspaceRouteState(
+  pathname: string,
+  search: RouteSearch,
+  schemas: SchemaName[],
+): WorkspaceRouteState {
+  const parts = pathname.split("/").filter(Boolean);
+  const page = parts[0];
+  const defaultSchema = getDefaultSchema(schemas);
+
+  if (page === "profile") {
+    return {
+      entity: getDefaultEntityKey(defaultSchema),
+      mode: "list",
+      page: "profile",
+      schema: defaultSchema,
+      search,
+    };
+  }
+
+  if (page === "settings") {
+    return {
+      entity: getDefaultEntityKey(defaultSchema),
+      mode: "list",
+      page: "settings",
+      schema: defaultSchema,
+      search,
+    };
+  }
+
+  const schema = validateSchema(parts[1], schemas);
+  const entity = validateEntityKey(schema, parts[2]);
+  const rowId = parts[3] && parts[3] !== "new" ? decodeURIComponent(parts[3]) : undefined;
+  const mode: ViewMode =
+    parts[3] === "new" ? "create" : parts[4] === "edit" ? "edit" : rowId ? "detail" : "list";
+
+  return {
+    canonicalPath: dashboardPath({
+      schema,
+      entity,
+      mode,
+      rowId,
+    }),
+    entity,
+    mode,
+    page: "dashboard",
+    rowId,
+    schema,
+    search,
+  };
+}
 
 function InfoRow({
   icon,
@@ -150,26 +227,131 @@ function UserSummary() {
   );
 }
 
-function AccountControls() {
-  const { email, isSigningOut, name, signOut, signOutError } = useAuth();
+function AccountControls({ dashboardSchema }: { dashboardSchema: SchemaName }) {
+  const { email, image, isSigningOut, name, signOut, signOutError } = useAuth();
+  const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  const initials = (name || email || text.account).slice(0, 1).toUpperCase();
 
   return (
-    <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end">
-      <div className="min-w-0 text-right">
-        <p className="text-sm font-bold text-ink">{name || text.account}</p>
-        {email ? <p className="break-all text-xs text-slate-600">{email}</p> : null}
-      </div>
+    <div className="relative self-end" ref={menuRef}>
       <button
-        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-cedar/30 hover:bg-cedar/5 disabled:opacity-60 sm:w-auto sm:justify-start sm:py-2"
-        disabled={isSigningOut}
-        onClick={() => void signOut().catch(() => undefined)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-sm transition hover:border-cedar/30 hover:bg-cedar/5"
+        onClick={() => setIsOpen((current) => !current)}
         type="button"
       >
-        <LogOut className="h-4 w-4" aria-hidden="true" />
-        {isSigningOut ? text.signingOut : text.signOut}
+        {image ? (
+          <img
+            alt=""
+            className="h-10 w-10 rounded-xl object-cover"
+            src={image}
+          />
+        ) : (
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cedar text-base font-bold text-white">
+            {initials}
+          </span>
+        )}
+        <ChevronDown className="h-4 w-4" aria-hidden="true" />
       </button>
+
+      {isOpen ? (
+        <div
+          className="absolute left-0 z-[100] mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 text-right shadow-2xl shadow-slate-900/10"
+          role="menu"
+        >
+          <div className="border-b border-slate-100 px-3 py-3">
+            <p className="truncate text-sm font-bold text-ink">
+              {name || text.account}
+            </p>
+            {email ? (
+              <p className="mt-1 break-all text-xs text-slate-600">{email}</p>
+            ) : null}
+          </div>
+          <button
+            className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
+            onClick={() => {
+              setIsOpen(false);
+              void navigate({
+                to: dashboardPath({
+                  schema: dashboardSchema,
+                  entity: getDefaultEntityKey(dashboardSchema),
+                }),
+              });
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>{text.dashboard}</span>
+            <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
+            onClick={() => {
+              setIsOpen(false);
+              void navigate({ to: "/profile" });
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>{text.profile}</span>
+            <UserRound className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
+            onClick={() => {
+              setIsOpen(false);
+              void navigate({ to: "/settings" });
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>{text.settings}</span>
+            <Settings2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar disabled:opacity-60"
+            disabled={isSigningOut}
+            onClick={() => void signOut().catch(() => undefined)}
+            role="menuitem"
+            type="button"
+          >
+            <span>{isSigningOut ? text.signingOut : text.signOut}</span>
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
       {signOutError ? (
-        <p className="max-w-xs text-right text-xs leading-5 text-red-700">
+        <p className="absolute left-0 mt-2 w-64 text-right text-xs leading-5 text-amber-800">
           {signOutError}
         </p>
       ) : null}
@@ -177,57 +359,30 @@ function AccountControls() {
   );
 }
 
-function WorkspaceTabs({
-  activePage,
-  onSelect,
-}: {
-  activePage: WorkspacePage;
-  onSelect: (page: WorkspacePage) => void;
-}) {
-  const tabs: {
-    icon: typeof LayoutDashboard;
-    label: string;
-    page: WorkspacePage;
-  }[] = [
-    { icon: LayoutDashboard, label: text.dashboard, page: "dashboard" },
-    { icon: UserRound, label: text.profile, page: "profile" },
-  ];
-
-  return (
-    <div className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white/80 p-1 shadow-sm sm:flex sm:w-auto sm:flex-wrap sm:gap-2">
-      {tabs.map(({ icon: Icon, label, page }) => (
-        <button
-          className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition sm:px-4 sm:py-2 ${
-            activePage === page
-              ? "bg-cedar text-white shadow-md shadow-cedar/20"
-              : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
-          }`}
-          key={page}
-          onClick={() => onSelect(page)}
-          type="button"
-        >
-          <Icon className="h-4 w-4" aria-hidden="true" />
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export function AuthPanel({ appName }: { appName: string }) {
-  const [pathname, setPathname] = useState(() => window.location.pathname);
-  const [workspacePage, setWorkspacePage] =
-    useState<WorkspacePage>("dashboard");
+  const location = useLocation();
+  const navigate = useNavigate();
   const { sessionId } = useAuth();
+  const schemas = useMemo(() => getConfiguredSchemas(), []);
+  const routeState = getWorkspaceRouteState(
+    location.pathname,
+    location.search as RouteSearch,
+    schemas,
+  );
 
   useEffect(() => {
-    function syncPathname() {
-      setPathname(window.location.pathname);
+    if (
+      location.pathname.startsWith("/dashboard") &&
+      routeState.canonicalPath &&
+      location.pathname !== routeState.canonicalPath
+    ) {
+      void navigate({
+        to: routeState.canonicalPath,
+        replace: true,
+        search: location.search as RouteSearch,
+      });
     }
-
-    window.addEventListener("popstate", syncPathname);
-    return () => window.removeEventListener("popstate", syncPathname);
-  }, []);
+  }, [location.pathname, location.search, navigate, routeState.canonicalPath]);
 
   return (
     <>
@@ -247,35 +402,17 @@ export function AuthPanel({ appName }: { appName: string }) {
           </div>
 
           <div className="relative order-1 rounded-3xl border border-white/70 bg-white/90 p-4 shadow-2xl shadow-cedar/10 backdrop-blur sm:p-5 lg:order-2">
-            <AuthView pathname={pathname} redirectTo={import.meta.env.BASE_URL} />
+            <AuthView pathname={location.pathname} redirectTo={import.meta.env.BASE_URL} />
           </div>
         </section>
       </SignedOut>
 
       <SignedIn>
         <section className="space-y-4 sm:space-y-6">
-          <header className="rounded-3xl border border-white/70 bg-white/80 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0">
-                <p className="inline-flex max-w-full items-center gap-2 rounded-full bg-cedar/10 px-3 py-1 text-xs font-bold text-cedar">
-                  <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-                  <span className="truncate">{appName}</span>
-                </p>
-                <h1 className="mt-3 text-2xl font-bold text-ink sm:text-3xl">
-                  {text.workspace}
-                </h1>
-              </div>
-              <WorkspaceTabs
-                activePage={workspacePage}
-                onSelect={setWorkspacePage}
-              />
-              <AccountControls />
-            </div>
-          </header>
-
           <SignedInWorkspace
             key={sessionId ?? "signed-in"}
-            page={workspacePage}
+            routeState={routeState}
+            schemas={schemas}
           />
         </section>
       </SignedIn>
@@ -283,8 +420,16 @@ export function AuthPanel({ appName }: { appName: string }) {
   );
 }
 
-function SignedInWorkspace({ page }: { page: WorkspacePage }) {
+function SignedInWorkspace({
+  routeState,
+  schemas,
+}: {
+  routeState: WorkspaceRouteState;
+  schemas: SchemaName[];
+}) {
   const { hasAdminUiAccess, isLoading } = useAuth();
+  const navigate = useNavigate();
+  const topAccessory = <AccountControls dashboardSchema={routeState.schema} />;
 
   if (isLoading) {
     return (
@@ -297,8 +442,8 @@ function SignedInWorkspace({ page }: { page: WorkspacePage }) {
   if (!hasAdminUiAccess) {
     return (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-        <div className="rounded-3xl border border-red-100 bg-white/90 p-6 shadow-xl shadow-red-950/5">
-          <p className="inline-flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+        <div className="rounded-3xl border border-amber-100 bg-white/90 p-6 shadow-xl shadow-amber-950/5">
+          <p className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
             <XCircle className="h-4 w-4" aria-hidden="true" />
             {text.accessDenied}
           </p>
@@ -314,5 +459,43 @@ function SignedInWorkspace({ page }: { page: WorkspacePage }) {
     );
   }
 
-  return page === "profile" ? <UserSummary /> : <CrudDashboard />;
+  if (routeState.page === "profile") {
+    return (
+      <>
+        <div className="relative z-50 flex justify-end">{topAccessory}</div>
+        <UserSummary />
+      </>
+    );
+  }
+
+  if (routeState.page === "settings") {
+    return (
+      <>
+        <div className="relative z-50 flex justify-end">{topAccessory}</div>
+        <SchemaSettingsPage
+          activeSchema={routeState.schema}
+          onSelect={(schema) =>
+            void navigate({
+              to: dashboardPath({
+                schema,
+                entity: getDefaultEntityKey(schema),
+              }),
+            })
+          }
+          schemas={schemas}
+        />
+      </>
+    );
+  }
+
+  return (
+    <CrudDashboard
+      activeEntityKey={routeState.entity}
+      activeSchema={routeState.schema}
+      mode={routeState.mode}
+      rowId={routeState.rowId}
+      routeSearch={routeState.search}
+      topAccessory={topAccessory}
+    />
+  );
 }

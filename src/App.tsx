@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { NeonAuthUIProvider } from "@neondatabase/neon-js/auth/react/ui";
 import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
@@ -13,19 +14,12 @@ const authBasePath = `${trimmedBasePath}/auth`;
 
 const appName = "\u0645\u0646\u0635\u0629 \u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u0645\u0633\u062C\u062F";
 
-function updateUrl(href: string, mode: "push" | "replace") {
-  if (/^(https?:|mailto:|tel:)/i.test(href)) {
-    window.location.href = href;
-    return;
+function toRouterPath(href: string) {
+  if (appBasePath !== "/" && href.startsWith(appBasePath)) {
+    return `/${href.slice(appBasePath.length)}`;
   }
 
-  if (mode === "replace") {
-    window.history.replaceState(null, "", href);
-  } else {
-    window.history.pushState(null, "", href);
-  }
-
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  return href;
 }
 
 function AuthLink({
@@ -37,6 +31,8 @@ function AuthLink({
   children: ReactNode;
   href: string;
 }) {
+  const navigate = useNavigate();
+
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     onClick?.(event);
 
@@ -53,7 +49,7 @@ function AuthLink({
     }
 
     event.preventDefault();
-    updateUrl(href, "push");
+    void navigate({ to: toRouterPath(href) });
   }
 
   return (
@@ -64,6 +60,8 @@ function AuthLink({
 }
 
 export default function App() {
+  const navigate = useNavigate();
+
   if (!hasAppConfig) {
     return (
       <main dir="rtl" className="min-h-screen bg-paper text-ink">
@@ -120,9 +118,9 @@ export default function App() {
         usernameRequired: false,
       }}
       Link={AuthLink}
-      navigate={(href) => updateUrl(href, "push")}
+      navigate={(href) => void navigate({ to: toRouterPath(href) })}
       redirectTo={appBasePath}
-      replace={(href) => updateUrl(href, "replace")}
+      replace={(href) => void navigate({ to: toRouterPath(href), replace: true })}
     >
       <AuthProvider>
         <main dir="rtl" className="min-h-screen bg-paper text-ink">
@@ -149,7 +147,7 @@ function ConfigItem({
       <div className="flex items-start gap-3">
         <span
           className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full ${
-            ok ? "bg-cedar/10 text-cedar" : "bg-red-50 text-red-700"
+            ok ? "bg-cedar/10 text-cedar" : "bg-amber-50 text-amber-800"
           }`}
         >
           {ok ? (
@@ -165,7 +163,7 @@ function ConfigItem({
           </span>
           <span
             className={`mt-2 block text-xs font-bold ${
-              ok ? "text-cedar" : "text-red-700"
+              ok ? "text-cedar" : "text-amber-800"
             }`}
           >
             {ok

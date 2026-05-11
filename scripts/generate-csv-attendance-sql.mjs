@@ -289,6 +289,52 @@ CREATE TABLE IF NOT EXISTS ${schema}.attendance_records (
   CONSTRAINT attendance_records_student_session_unique UNIQUE (student_id, attendance_session_id)
 );
 
+DO $rls$
+DECLARE
+  app_table text;
+BEGIN
+  IF to_regprocedure('public.is_app_admin()') IS NULL THEN
+    RAISE NOTICE 'Skipping attendance RLS setup because public.is_app_admin() does not exist.';
+    RETURN;
+  END IF;
+
+  GRANT USAGE ON SCHEMA ${schema} TO authenticated;
+  REVOKE USAGE ON SCHEMA ${schema} FROM anonymous;
+
+  FOREACH app_table IN ARRAY ARRAY['attendance_sessions', 'attendance_records']
+  LOOP
+    EXECUTE format('ALTER TABLE ${schema}.%I ENABLE ROW LEVEL SECURITY', app_table);
+    EXECUTE format('ALTER TABLE ${schema}.%I FORCE ROW LEVEL SECURITY', app_table);
+    EXECUTE format('REVOKE ALL ON ${schema}.%I FROM anonymous', app_table);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ${schema}.%I TO authenticated', app_table);
+
+    EXECUTE format('DROP POLICY IF EXISTS app_admin_select ON ${schema}.%I', app_table);
+    EXECUTE format('DROP POLICY IF EXISTS app_admin_insert ON ${schema}.%I', app_table);
+    EXECUTE format('DROP POLICY IF EXISTS app_admin_update ON ${schema}.%I', app_table);
+    EXECUTE format('DROP POLICY IF EXISTS app_admin_delete ON ${schema}.%I', app_table);
+
+    EXECUTE format(
+      'CREATE POLICY app_admin_select ON ${schema}.%I FOR SELECT TO authenticated USING (public.is_app_admin())',
+      app_table
+    );
+    EXECUTE format(
+      'CREATE POLICY app_admin_insert ON ${schema}.%I FOR INSERT TO authenticated WITH CHECK (public.is_app_admin())',
+      app_table
+    );
+    EXECUTE format(
+      'CREATE POLICY app_admin_update ON ${schema}.%I FOR UPDATE TO authenticated USING (public.is_app_admin()) WITH CHECK (public.is_app_admin())',
+      app_table
+    );
+    EXECUTE format(
+      'CREATE POLICY app_admin_delete ON ${schema}.%I FOR DELETE TO authenticated USING (public.is_app_admin())',
+      app_table
+    );
+  END LOOP;
+
+  GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${schema} TO authenticated;
+  REVOKE ALL ON ALL SEQUENCES IN SCHEMA ${schema} FROM anonymous;
+END $rls$;
+
 CREATE TEMP TABLE _csv_students (
   row_number integer PRIMARY KEY,
   first_name text NOT NULL,

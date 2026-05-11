@@ -1,0 +1,88 @@
+import type { CrudValue } from "./crud/data";
+import {
+  findEntityDefinition,
+  getEntityDefinitions,
+  type EntityId,
+  type EntityKey,
+  type SchemaName,
+} from "./crud/entities";
+
+export type WorkspacePage = "dashboard" | "profile" | "settings";
+export type ViewMode = "list" | "create" | "detail" | "edit";
+export type RouteSearch = {
+  draft?: string;
+  q?: string;
+};
+export type DraftValues = Record<string, CrudValue>;
+
+export function getDefaultSchema(schemas: SchemaName[]) {
+  return schemas[0] ?? "mqs";
+}
+
+export function getDefaultEntityKey(schema: SchemaName) {
+  return getEntityDefinitions(schema)[0].id.split(".").at(-1) as EntityKey;
+}
+
+export function getEntityId(schema: SchemaName, entityKey: EntityKey): EntityId {
+  return `${schema}.${entityKey}`;
+}
+
+export function validateSchema(schema: string | undefined, schemas: SchemaName[]) {
+  return schema && schemas.includes(schema) ? schema : getDefaultSchema(schemas);
+}
+
+export function validateEntityKey(schema: SchemaName, entity: string | undefined) {
+  const entityId = entity ? getEntityId(schema, entity as EntityKey) : undefined;
+  return entityId && findEntityDefinition(entityId, getEntityDefinitions(schema))
+    ? (entity as EntityKey)
+    : getDefaultEntityKey(schema);
+}
+
+export function dashboardPath({
+  schema,
+  entity,
+  mode = "list",
+  rowId,
+}: {
+  schema: SchemaName;
+  entity: EntityKey;
+  mode?: ViewMode;
+  rowId?: CrudValue;
+}) {
+  const basePath = `/dashboard/${schema}/${entity}`;
+
+  if (mode === "create") {
+    return `${basePath}/new`;
+  }
+
+  if ((mode === "detail" || mode === "edit") && rowId !== undefined && rowId !== null) {
+    return `${basePath}/${encodeURIComponent(String(rowId))}${mode === "edit" ? "/edit" : ""}`;
+  }
+
+  return basePath;
+}
+
+export function encodeDraft(values: DraftValues) {
+  return btoa(encodeURIComponent(JSON.stringify(values)));
+}
+
+export function decodeDraft(value: string | undefined): DraftValues | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(atob(value)));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as DraftValues)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function cleanSearch(search: RouteSearch = {}) {
+  return Object.fromEntries(
+    Object.entries(search).filter(([, value]) => value !== undefined && value !== ""),
+  ) as RouteSearch;
+}

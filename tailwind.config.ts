@@ -15,8 +15,7 @@ export default {
       },
       fontFamily: {
         sans: [
-          "Cairo Variable",
-          "Cairo",
+          "Amiri",
           "ui-sans-serif",
           "system-ui",
           "Segoe UI",

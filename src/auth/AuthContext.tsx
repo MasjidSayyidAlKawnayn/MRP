@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import {
   createContext,
   useCallback,
@@ -7,13 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import { adminUiEmails, authClient } from "./client";
-
-const appBasePath = import.meta.env.BASE_URL;
-
-function replaceUrl(href: string) {
-  window.history.replaceState(null, "", href);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not sign out.";
@@ -59,6 +53,7 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const { data, error, isPending } = authClient.useSession();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
@@ -69,14 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       await authClient.signOut();
-      replaceUrl(appBasePath);
+      await navigate({ to: "/", replace: true });
     } catch (caughtError) {
       setSignOutError(getErrorMessage(caughtError));
       throw caughtError;
     } finally {
       setIsSigningOut(false);
     }
-  }, []);
+  }, [navigate]);
 
   const value = useMemo<AuthContextValue>(() => {
     const user = data?.user;

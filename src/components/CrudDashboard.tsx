@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   BookOpen,
   CalendarCheck,
@@ -40,19 +41,111 @@ import {
   type FieldDefinition,
   type SchemaName,
 } from "../crud/entities";
+import {
+  cleanSearch,
+  dashboardPath,
+  decodeDraft,
+  encodeDraft,
+  getEntityId,
+  type DraftValues,
+  type RouteSearch,
+  type ViewMode,
+} from "../routing";
 
-type ViewMode = "list" | "create" | "detail" | "edit";
 type RelationOptions = Partial<Record<EntityId, CrudRow[]>>;
-type PendingDetail = {
-  entityId: EntityId;
-  rowId: CrudValue;
-} | null;
+
+const ARABIC_DIACRITICS = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+const TATWEEL = /\u0640/g;
+
+function normalizeSearchText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(ARABIC_DIACRITICS, "")
+    .replace(TATWEEL, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ");
+}
+
+function getEditDistanceWithinLimit(
+  left: string,
+  right: string,
+  maxDistance: number,
+) {
+  if (Math.abs(left.length - right.length) > maxDistance) {
+    return maxDistance + 1;
+  }
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = current[0];
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost =
+        left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      const distance = Math.min(
+        previous[rightIndex] + 1,
+        current[rightIndex - 1] + 1,
+        previous[rightIndex - 1] + substitutionCost,
+      );
+
+      current[rightIndex] = distance;
+      rowMinimum = Math.min(rowMinimum, distance);
+    }
+
+    if (rowMinimum > maxDistance) {
+      return maxDistance + 1;
+    }
+
+    previous = current;
+  }
+
+  return previous[right.length];
+}
+
+function getAllowedFuzzyDistance(term: string) {
+  if (term.length <= 2) {
+    return 0;
+  }
+
+  if (term.length <= 5) {
+    return 1;
+  }
+
+  return 2;
+}
+
+function searchTermMatchesText(term: string, text: string) {
+  if (text.includes(term)) {
+    return true;
+  }
+
+  const maxDistance = getAllowedFuzzyDistance(term);
+
+  if (maxDistance === 0) {
+    return false;
+  }
+
+  return text
+    .split(" ")
+    .some(
+      (word) =>
+        Math.abs(word.length - term.length) <= maxDistance &&
+        getEditDistanceWithinLimit(term, word, maxDistance) <= maxDistance,
+    );
+}
 
 const groupColorClasses = [
   {
-    row: "bg-emerald-50/65 hover:bg-emerald-100/70",
-    chip: "border-emerald-200 bg-emerald-100 text-emerald-800",
-    marker: "bg-emerald-500",
+    row: "bg-rose-50/70 hover:bg-rose-100/75",
+    chip: "border-rose-200 bg-rose-100 text-rose-800",
+    marker: "bg-rose-500",
   },
   {
     row: "bg-sky-50/70 hover:bg-sky-100/75",
@@ -60,14 +153,14 @@ const groupColorClasses = [
     marker: "bg-sky-500",
   },
   {
-    row: "bg-amber-50/70 hover:bg-amber-100/75",
-    chip: "border-amber-200 bg-amber-100 text-amber-800",
-    marker: "bg-amber-500",
+    row: "bg-lime-50/75 hover:bg-lime-100/80",
+    chip: "border-lime-300 bg-lime-100 text-lime-800",
+    marker: "bg-lime-600",
   },
   {
-    row: "bg-rose-50/65 hover:bg-rose-100/70",
-    chip: "border-rose-200 bg-rose-100 text-rose-800",
-    marker: "bg-rose-500",
+    row: "bg-indigo-50/65 hover:bg-indigo-100/70",
+    chip: "border-indigo-200 bg-indigo-100 text-indigo-800",
+    marker: "bg-indigo-500",
   },
   {
     row: "bg-violet-50/60 hover:bg-violet-100/70",
@@ -332,7 +425,9 @@ function EntityForm({
   mode,
   relationOptions,
   row,
+  draft,
   onCancel,
+  onDraftChange,
   onSubmit,
 }: {
   entity: EntityDefinition;
@@ -340,13 +435,18 @@ function EntityForm({
   mode: "create" | "edit";
   relationOptions: RelationOptions;
   row?: CrudRow;
+  draft?: DraftValues;
   onCancel: () => void;
+  onDraftChange: (values: DraftValues) => void;
   onSubmit: (values: Record<string, CrudValue>) => Promise<void>;
 }) {
   const fields = useMemo(() => getEditableFields(entity, mode), [entity, mode]);
   const [values, setValues] = useState<Record<string, CrudValue>>(() =>
     Object.fromEntries(
-      fields.map((field) => [field.key, getInitialValue(field, row)]),
+      fields.map((field) => [
+        field.key,
+        draft?.[field.key] ?? getInitialValue(field, row),
+      ]),
     ),
   );
   const [isSaving, setIsSaving] = useState(false);
@@ -355,10 +455,24 @@ function EntityForm({
   useEffect(() => {
     setValues(
       Object.fromEntries(
-        fields.map((field) => [field.key, getInitialValue(field, row)]),
+        fields.map((field) => [
+          field.key,
+          draft?.[field.key] ?? getInitialValue(field, row),
+        ]),
       ),
     );
-  }, [fields, row]);
+  }, [draft, fields, row]);
+
+  function updateField(field: FieldDefinition, value: string) {
+    setValues((current) => {
+      const next = {
+        ...current,
+        [field.key]: parseInputValue(field, value),
+      };
+      onDraftChange(next);
+      return next;
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -389,12 +503,7 @@ function EntityForm({
             {field.relation ? (
               <select
                 className={inputClass}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    [field.key]: parseInputValue(field, event.target.value),
-                  }))
-                }
+                onChange={(event) => updateField(field, event.target.value)}
                 required={field.required}
                 value={toInputValue(values[field.key] ?? null, field)}
               >
@@ -422,24 +531,14 @@ function EntityForm({
             ) : field.type === "textarea" ? (
               <textarea
                 className={`${inputClass} min-h-32 resize-y leading-7`}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    [field.key]: parseInputValue(field, event.target.value),
-                  }))
-                }
+                onChange={(event) => updateField(field, event.target.value)}
                 required={field.required}
                 value={toInputValue(values[field.key] ?? null, field)}
               />
             ) : field.type === "boolean" ? (
               <select
                 className={inputClass}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    [field.key]: parseInputValue(field, event.target.value),
-                  }))
-                }
+                onChange={(event) => updateField(field, event.target.value)}
                 required={field.required}
                 value={toInputValue(values[field.key] ?? false, field)}
               >
@@ -449,12 +548,7 @@ function EntityForm({
             ) : (
               <input
                 className={inputClass}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    [field.key]: parseInputValue(field, event.target.value),
-                  }))
-                }
+                onChange={(event) => updateField(field, event.target.value)}
                 required={field.required}
                 max={field.max}
                 min={field.min}
@@ -480,7 +574,7 @@ function EntityForm({
       </div>
 
       {error ? (
-        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {error}
         </p>
       ) : null}
@@ -650,31 +744,36 @@ export function SchemaSettingsPage({
 }
 
 export function CrudDashboard({
+  activeEntityKey,
   activeSchema,
+  mode,
+  rowId,
+  routeSearch,
   topAccessory,
 }: {
+  activeEntityKey: EntityKey;
   activeSchema: SchemaName;
+  mode: ViewMode;
+  rowId?: string;
+  routeSearch: RouteSearch;
   topAccessory: ReactNode;
 }) {
+  const navigate = useNavigate();
   const entityDefinitions = useMemo(
     () => getEntityDefinitions(activeSchema),
     [activeSchema],
   );
-  const [activeEntityId, setActiveEntityId] = useState<EntityId>(
-    entityDefinitions[0].id,
-  );
+  const activeEntityId = getEntityId(activeSchema, activeEntityKey);
   const activeEntity =
     findEntityDefinition(activeEntityId, entityDefinitions) ??
     entityDefinitions[0];
-  const activeEntityKey = getEntityKey(activeEntity.id);
   const [rows, setRows] = useState<CrudRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
-  const [mode, setMode] = useState<ViewMode>("list");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [relationOptions, setRelationOptions] = useState<RelationOptions>({});
-  const [searchTerm, setSearchTerm] = useState("");
-  const [pendingDetail, setPendingDetail] = useState<PendingDetail>(null);
+  const searchTerm = routeSearch.q ?? "";
+  const draft = useMemo(() => decodeDraft(routeSearch.draft), [routeSearch.draft]);
 
   const relationEntityIds = useMemo(
     () =>
@@ -702,33 +801,22 @@ export function CrudDashboard({
   }
 
   useEffect(() => {
-    setActiveEntityId(entityDefinitions[0].id);
-  }, [entityDefinitions]);
-
-  useEffect(() => {
     setSelectedRow(null);
-    setSearchTerm("");
-    setMode("list");
     void refreshRows(activeEntity);
   }, [activeEntity]);
 
   useEffect(() => {
-    if (!pendingDetail || pendingDetail.entityId !== activeEntity.id) {
+    if (!rowId || (mode !== "detail" && mode !== "edit")) {
+      setSelectedRow(null);
       return;
     }
 
     const row = rows.find(
-      (currentRow) => String(currentRow.id) === String(pendingDetail.rowId),
+      (currentRow) => String(currentRow.id) === String(rowId),
     );
 
-    if (!row) {
-      return;
-    }
-
-    setSelectedRow(row);
-    setMode("detail");
-    setPendingDetail(null);
-  }, [activeEntity.id, pendingDetail, rows]);
+    setSelectedRow(row ?? null);
+  }, [mode, rowId, rows]);
 
   useEffect(() => {
     let isMounted = true;
@@ -779,36 +867,55 @@ export function CrudDashboard({
     }
 
     await softDeleteRow(activeEntity, id);
-    setSelectedRow(null);
-    setMode("list");
     await refreshRows();
+    void navigate({
+      to: dashboardPath({
+        schema: activeSchema,
+        entity: getEntityKey(activeEntity.id),
+      }),
+      search: cleanSearch({ q: searchTerm }),
+    });
   }
 
   const filteredRows = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const normalizedSearch = normalizeSearchText(searchTerm);
 
     if (!normalizedSearch) {
       return rows;
     }
 
-    return rows.filter((row) =>
-      activeEntity.fields.some((field) =>
-        formatFieldValue(
-          field,
-          row[field.key],
-          relationOptions,
-          entityDefinitions,
-        )
-          .toLowerCase()
-          .includes(normalizedSearch),
-      ),
-    );
+    const searchTerms = normalizedSearch.split(" ");
+
+    return rows.filter((row) => {
+      const searchableText = normalizeSearchText(
+        activeEntity.fields
+          .map((field) =>
+            formatFieldValue(
+              field,
+              row[field.key],
+              relationOptions,
+              entityDefinitions,
+            ),
+          )
+          .join(" "),
+      );
+
+      return searchTerms.every((term) =>
+        searchTermMatchesText(term, searchableText),
+      );
+    });
   }, [activeEntity, entityDefinitions, relationOptions, rows, searchTerm]);
 
   async function handleCreate(values: Record<string, CrudValue>) {
     await createRow(activeEntity, values);
-    setMode("list");
     await refreshRows();
+    void navigate({
+      to: dashboardPath({
+        schema: activeSchema,
+        entity: getEntityKey(activeEntity.id),
+      }),
+      search: cleanSearch({ q: searchTerm }),
+    });
   }
 
   async function handleUpdate(values: Record<string, CrudValue>) {
@@ -817,9 +924,16 @@ export function CrudDashboard({
     }
 
     await updateRow(activeEntity, Number(selectedRow.id), values);
-    setMode("list");
-    setSelectedRow(null);
     await refreshRows();
+    void navigate({
+      to: dashboardPath({
+        schema: activeSchema,
+        entity: getEntityKey(activeEntity.id),
+        mode: "detail",
+        rowId: selectedRow.id,
+      }),
+      search: cleanSearch({ q: searchTerm }),
+    });
   }
 
   function handleRelationDetail(field: FieldDefinition, row: CrudRow) {
@@ -833,11 +947,50 @@ export function CrudDashboard({
       return;
     }
 
-    setPendingDetail({
-      entityId: field.relation.entityId,
-      rowId: relatedRow.id,
+    const [schema, entity] = field.relation.entityId.split(".") as [
+      SchemaName,
+      EntityKey,
+    ];
+
+    void navigate({
+      to: dashboardPath({
+        schema,
+        entity,
+        mode: "detail",
+        rowId: relatedRow.id,
+      }),
     });
-    setActiveEntityId(field.relation.entityId);
+  }
+
+  function navigateDashboard(next: {
+    entity?: EntityKey;
+    mode?: ViewMode;
+    replace?: boolean;
+    rowId?: CrudValue;
+    search?: RouteSearch;
+  }) {
+    void navigate({
+      to: dashboardPath({
+        schema: activeSchema,
+        entity: next.entity ?? getEntityKey(activeEntity.id),
+        mode: next.mode,
+        rowId: next.rowId,
+      }),
+      replace: next.replace,
+      search: cleanSearch(next.search ?? { q: searchTerm }),
+    });
+  }
+
+  function handleDraftChange(values: DraftValues) {
+    navigateDashboard({
+      mode,
+      rowId,
+      replace: true,
+      search: cleanSearch({
+        q: searchTerm,
+        draft: encodeDraft(values),
+      }),
+    });
   }
 
   return (
@@ -858,13 +1011,18 @@ export function CrudDashboard({
         <EntityNav
           activeEntityId={activeEntity.id}
           entityDefinitions={entityDefinitions}
-          onSelect={setActiveEntityId}
+          onSelect={(entityId) => {
+            navigateDashboard({
+              entity: getEntityKey(entityId),
+              search: {},
+            });
+          }}
         />
 
         <section className="min-w-0 space-y-4 sm:space-y-5">
 
         {error ? (
-          <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             {error}
           </p>
         ) : null}
@@ -877,8 +1035,10 @@ export function CrudDashboard({
             <EntityForm
               entity={activeEntity}
               entityDefinitions={entityDefinitions}
+              draft={draft}
               mode="create"
-              onCancel={() => setMode("list")}
+              onCancel={() => navigateDashboard({ search: cleanSearch({ q: searchTerm }) })}
+              onDraftChange={handleDraftChange}
               onSubmit={handleCreate}
               relationOptions={relationOptions}
             />
@@ -893,8 +1053,16 @@ export function CrudDashboard({
             <EntityForm
               entity={activeEntity}
               entityDefinitions={entityDefinitions}
+              draft={draft}
               mode="edit"
-              onCancel={() => setMode("detail")}
+              onCancel={() =>
+                navigateDashboard({
+                  mode: "detail",
+                  rowId,
+                  search: cleanSearch({ q: searchTerm }),
+                })
+              }
+              onDraftChange={handleDraftChange}
               onSubmit={handleUpdate}
               relationOptions={relationOptions}
               row={selectedRow}
@@ -906,25 +1074,30 @@ export function CrudDashboard({
           <DetailView
             entity={activeEntity}
             entityDefinitions={entityDefinitions}
-            onEdit={() => setMode("edit")}
+            onEdit={() =>
+              navigateDashboard({
+                mode: "edit",
+                rowId: selectedRow.id,
+              })
+            }
             relationOptions={relationOptions}
             row={selectedRow}
           />
         ) : null}
 
-        <div className="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
-          <div className="space-y-3 border-b border-slate-200/80 px-3 py-3 sm:px-4">
-            <div className="flex items-start justify-between gap-3">
+        <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
+          <div className="space-y-2 border-b border-slate-200/80 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 text-right">
-                <h2 className="text-lg font-bold text-ink">{activeEntity.label}</h2>
-                <p className="mt-1 text-xs text-slate-500">
+                <h2 className="text-base font-bold text-ink sm:text-lg">{activeEntity.label}</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
                   {ui.showing} {filteredRows.length} {ui.from} {rows.length}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   aria-label={ui.refresh}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-11 sm:w-11"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-10 sm:w-10"
                   onClick={() => void refreshRows()}
                   title={ui.refresh}
                   type="button"
@@ -933,11 +1106,8 @@ export function CrudDashboard({
                 </button>
                 <button
                   aria-label={`${ui.add} ${activeEntity.singularLabel}`}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:h-11 sm:w-11"
-                  onClick={() => {
-                    setSelectedRow(null);
-                    setMode("create");
-                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:h-10 sm:w-10"
+                  onClick={() => navigateDashboard({ mode: "create", search: {} })}
                   title={`${ui.add} ${activeEntity.singularLabel}`}
                   type="button"
                 >
@@ -948,8 +1118,16 @@ export function CrudDashboard({
             <label className="relative block w-full">
               <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pe-4 ps-10 text-sm shadow-sm"
-                onChange={(event) => setSearchTerm(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 pe-4 ps-10 text-sm shadow-sm"
+                onChange={(event) =>
+                  navigateDashboard({
+                    replace: true,
+                    search: cleanSearch({
+                      ...routeSearch,
+                      q: event.target.value,
+                    }),
+                  })
+                }
                 placeholder={`${ui.search} ${activeEntity.label}`}
                 type="search"
                 value={searchTerm}
@@ -973,16 +1151,16 @@ export function CrudDashboard({
                 <thead className="bg-mist/70">
                   <tr>
                     {activeEntityKey === "students" ? (
-                      <th className="w-10 px-2 py-2 font-bold text-slate-600 sm:px-3">
+                      <th className="w-8 px-1.5 py-1 font-bold text-slate-600 sm:px-2">
                         <span className="sr-only">لون المجموعة</span>
                       </th>
                     ) : null}
                     {activeEntity.listFields.map((key) => (
-                      <th className="break-words px-2 py-2 font-bold leading-5 text-slate-600 sm:px-3" key={key}>
+                      <th className="break-words px-1.5 py-1 font-bold leading-5 text-slate-600 sm:px-2" key={key}>
                         {getField(activeEntity, key)?.label ?? key}
                       </th>
                     ))}
-                    <th className="w-24 px-2 py-2 font-bold text-slate-600 sm:w-28 sm:px-3">
+                    <th className="w-24 px-1.5 py-1 font-bold text-slate-600 sm:w-28 sm:px-2">
                       {ui.actions}
                     </th>
                   </tr>
@@ -1000,9 +1178,9 @@ export function CrudDashboard({
                         key={String(row.id)}
                       >
                         {groupColor ? (
-                          <td className="px-2 py-2 sm:px-3">
+                          <td className="px-1.5 py-1 sm:px-2">
                             <span
-                              className={`mx-auto block h-8 w-2 rounded-full ${groupColor.marker}`}
+                              className={`mx-auto block h-6 w-1.5 rounded-full ${groupColor.marker}`}
                             />
                           </td>
                         ) : null}
@@ -1019,12 +1197,12 @@ export function CrudDashboard({
 
                           return (
                             <td
-                              className="break-words px-2 py-2 leading-5 text-slate-700 sm:px-3"
+                              className="break-words px-1.5 py-1 leading-5 text-slate-700 sm:px-2"
                               key={key}
                             >
                               {isStudentGroup && field?.relation ? (
                                 <button
-                                  className={`inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-bold transition hover:shadow-sm sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold transition hover:shadow-sm sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
                                   onClick={() => handleRelationDetail(field, row)}
                                   type="button"
                                 >
@@ -1039,15 +1217,19 @@ export function CrudDashboard({
                             </td>
                           );
                         })}
-                        <td className="px-2 py-2 sm:px-3">
+                        <td className="px-1.5 py-1 sm:px-2">
                           <div className="flex gap-1">
                             <ActionButton compact icon={Eye} label={ui.view} onClick={() => {
-                              setSelectedRow(row);
-                              setMode("detail");
+                              navigateDashboard({
+                                mode: "detail",
+                                rowId: row.id,
+                              });
                             }} />
                             <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => {
-                              setSelectedRow(row);
-                              setMode("edit");
+                              navigateDashboard({
+                                mode: "edit",
+                                rowId: row.id,
+                              });
                             }} />
                             <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
                           </div>
@@ -1084,9 +1266,9 @@ function ActionButton({
     <button
       className={`inline-flex items-center justify-center rounded-xl text-xs font-bold transition ${
         danger
-          ? "bg-red-50 text-red-700 hover:bg-red-100"
+          ? "bg-amber-50 text-amber-800 hover:bg-amber-100"
           : "bg-slate-100 text-slate-700 hover:bg-cedar/10 hover:text-cedar"
-      } ${compact ? "h-9 w-9 px-0 py-0" : "gap-1.5 px-3 py-1.5"}`}
+      } ${compact ? "h-7 w-7 px-0 py-0" : "gap-1.5 px-3 py-1.5"}`}
       aria-label={compact ? label : undefined}
       onClick={onClick}
       type="button"
