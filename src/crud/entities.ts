@@ -13,6 +13,10 @@ export type EntityKey =
   | "groups"
   | "assignments"
   | "pages"
+  | "pagePointAwards"
+  | "manualPointTransactions"
+  | "pagePointTiers"
+  | "points"
   | "attendanceSessions"
   | "attendanceRecords";
 export type EntityId = `${SchemaName}.${EntityKey}`;
@@ -95,6 +99,11 @@ const groupRelation = {
 const attendanceSessionRelation = {
   entityId: "mqs.attendanceSessions",
   labelFields: ["sessionDate", "label"],
+} satisfies FieldDefinition["relation"];
+
+const memorizationPageRelation = {
+  entityId: "mqs.pages",
+  labelFields: ["page"],
 } satisfies FieldDefinition["relation"];
 
 const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
@@ -298,7 +307,7 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
     displayFields: ["name"],
   },
   {
-    table: "memorization",
+    table: "memorization_pages",
     label: "Memorized Pages",
     singularLabel: "Memorized Page",
     description: "Record the pages each student has memorized.",
@@ -322,10 +331,159 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         required: true,
         helpText: "Quran page number from 1 to 604.",
       },
+      {
+        key: "memorizedOn",
+        column: "memorized_on",
+        label: "Memorized on",
+        type: "date",
+        required: true,
+      },
       ...timestamps,
     ],
-    listFields: ["id", "studentId", "page"],
+    listFields: ["id", "studentId", "page", "memorizedOn"],
     displayFields: ["studentId", "page"],
+  },
+  {
+    table: "page_point_awards",
+    label: "Page Point Awards",
+    singularLabel: "Page Point Award",
+    description: "Stored point awards generated from memorized page entries.",
+    showInNav: false,
+    fields: [
+      idField,
+      {
+        key: "memorizationPageId",
+        column: "memorization_page_id",
+        label: "Memorized page",
+        type: "number",
+        required: true,
+        relation: memorizationPageRelation,
+      },
+      {
+        key: "studentId",
+        column: "student_id",
+        label: "Student",
+        type: "number",
+        required: true,
+        relation: studentRelation,
+      },
+      {
+        key: "ruleName",
+        column: "rule_name",
+        label: "Rule name",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "snapshot",
+        column: "snapshot",
+        label: "Snapshot",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "points",
+        column: "points",
+        label: "Points",
+        type: "number",
+        required: true,
+      },
+      ...timestamps,
+    ],
+    listFields: ["id", "studentId", "memorizationPageId", "points"],
+    displayFields: ["ruleName", "points"],
+  },
+  {
+    table: "manual_point_transactions",
+    label: "Manual Point Transactions",
+    singularLabel: "Manual Point Transaction",
+    description: "Manual rewards and penalties with required reasons.",
+    showInNav: false,
+    fields: [
+      idField,
+      {
+        key: "studentId",
+        column: "student_id",
+        label: "Student",
+        type: "number",
+        required: true,
+        relation: studentRelation,
+      },
+      {
+        key: "transactionDate",
+        column: "transaction_date",
+        label: "Date",
+        type: "date",
+        required: true,
+      },
+      {
+        key: "amount",
+        column: "amount",
+        label: "Amount",
+        type: "number",
+        required: true,
+      },
+      {
+        key: "reason",
+        column: "reason",
+        label: "Reason",
+        type: "textarea",
+        required: true,
+      },
+      ...timestamps,
+    ],
+    listFields: ["id", "studentId", "transactionDate", "amount", "reason"],
+    displayFields: ["studentId", "amount"],
+  },
+  {
+    table: "page_point_tiers",
+    label: "Page Point Tiers",
+    singularLabel: "Page Point Tier",
+    description: "Configure daily memorized-page point totals.",
+    showInNav: false,
+    fields: [
+      idField,
+      {
+        key: "minPages",
+        column: "min_pages",
+        label: "Minimum pages",
+        type: "number",
+        min: 1,
+        required: true,
+      },
+      {
+        key: "maxPages",
+        column: "max_pages",
+        label: "Maximum pages",
+        type: "number",
+      },
+      {
+        key: "points",
+        column: "points",
+        label: "Points",
+        type: "number",
+        required: true,
+      },
+      {
+        key: "name",
+        column: "name",
+        label: "Name",
+        type: "text",
+        required: true,
+      },
+      ...timestamps,
+    ],
+    listFields: ["id", "minPages", "maxPages", "points", "name"],
+    displayFields: ["name", "points"],
+  },
+  {
+    table: "students",
+    label: "Points",
+    singularLabel: "Points",
+    description: "Compare student memorization progress and total points.",
+    fields: [idField],
+    listFields: ["id"],
+    displayFields: ["id"],
   },
   {
     table: "attendance_sessions",
@@ -408,6 +566,10 @@ const entityKeys: EntityKey[] = [
   "groups",
   "assignments",
   "pages",
+  "pagePointAwards",
+  "manualPointTransactions",
+  "pagePointTiers",
+  "points",
   "attendanceSessions",
   "attendanceRecords",
 ];
@@ -446,6 +608,30 @@ const arabicEntities: Record<
     description:
       "\u062A\u0633\u062C\u064A\u0644 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0642\u0631\u0622\u0646 \u0627\u0644\u062A\u064A \u0623\u062A\u0645 \u0627\u0644\u0637\u0627\u0644\u0628 \u062D\u0641\u0638\u0647\u0627.",
   },
+  pagePointAwards: {
+    label: "\u0646\u0642\u0627\u0637 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u062D\u0641\u0638",
+    singularLabel: "\u0646\u0642\u0627\u0637 \u0635\u0641\u062D\u0629",
+    description:
+      "\u0633\u062C\u0644 \u0627\u0644\u0646\u0642\u0627\u0637 \u0627\u0644\u0645\u0648\u0644\u062F\u0629 \u0645\u0646 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u062D\u0641\u0638.",
+  },
+  manualPointTransactions: {
+    label: "\u0645\u0643\u0627\u0641\u0622\u062A \u0648\u062E\u0635\u0648\u0645\u0627\u062A",
+    singularLabel: "\u062D\u0631\u0643\u0629 \u0646\u0642\u0627\u0637",
+    description:
+      "\u0625\u0636\u0627\u0641\u0629 \u0645\u0643\u0627\u0641\u0622\u062A \u0623\u0648 \u062E\u0635\u0648\u0645\u0627\u062A \u064A\u062F\u0648\u064A\u0629 \u0645\u0639 \u0633\u0628\u0628.",
+  },
+  pagePointTiers: {
+    label: "\u0634\u0631\u0627\u0626\u062D \u0646\u0642\u0627\u0637 \u0627\u0644\u0635\u0641\u062D\u0627\u062A",
+    singularLabel: "\u0634\u0631\u064A\u062D\u0629 \u0646\u0642\u0627\u0637",
+    description:
+      "\u062A\u062D\u062F\u064A\u062F \u0646\u0642\u0627\u0637 \u0627\u0644\u062D\u0641\u0638 \u062D\u0633\u0628 \u0639\u062F\u062F \u0627\u0644\u0635\u0641\u062D\u0627\u062A \u0641\u064A \u0627\u0644\u064A\u0648\u0645.",
+  },
+  points: {
+    label: "\u0644\u0648\u062D\u0629 \u0627\u0644\u0646\u0642\u0627\u0637",
+    singularLabel: "\u0644\u0648\u062D\u0629 \u0627\u0644\u0646\u0642\u0627\u0637",
+    description:
+      "\u062A\u0631\u062A\u064A\u0628 \u0627\u0644\u0637\u0644\u0627\u0628 \u062D\u0633\u0628 \u0627\u0644\u0646\u0642\u0627\u0637 \u0648\u0635\u0641\u062D\u0627\u062A \u0627\u0644\u062D\u0641\u0638.",
+  },
   attendanceSessions: {
     label: "\u062C\u0644\u0633\u0627\u062A \u0627\u0644\u062D\u0636\u0648\u0631",
     singularLabel: "\u062C\u0644\u0633\u0629 \u062D\u0636\u0648\u0631",
@@ -481,6 +667,16 @@ const arabicFieldLabels: Record<string, string> = {
   motherPhone: "\u0647\u0627\u062A\u0641 \u0627\u0644\u0623\u0645",
   name: "\u0627\u0644\u0639\u0646\u0648\u0627\u0646",
   page: "\u0627\u0644\u0635\u0641\u062D\u0629",
+  memorizedOn: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062D\u0641\u0638",
+  memorizationPageId: "\u0635\u0641\u062D\u0629 \u0627\u0644\u062D\u0641\u0638",
+  ruleName: "\u0627\u0633\u0645 \u0627\u0644\u0642\u0627\u0639\u062F\u0629",
+  snapshot: "\u0644\u0642\u0637\u0629 \u0627\u0644\u0642\u0627\u0639\u062F\u0629",
+  points: "\u0627\u0644\u0646\u0642\u0627\u0637",
+  transactionDate: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062D\u0631\u0643\u0629",
+  amount: "\u0627\u0644\u0645\u0642\u062F\u0627\u0631",
+  reason: "\u0627\u0644\u0633\u0628\u0628",
+  minPages: "\u0623\u0642\u0644 \u0639\u062F\u062F \u0635\u0641\u062D\u0627\u062A",
+  maxPages: "\u0623\u0643\u0628\u0631 \u0639\u062F\u062F \u0635\u0641\u062D\u0627\u062A",
   phone: "\u0627\u0644\u0647\u0627\u062A\u0641",
   phoneNumber: "\u0631\u0642\u0645 \u0627\u0644\u0647\u0627\u062A\u0641",
   reminderSent:

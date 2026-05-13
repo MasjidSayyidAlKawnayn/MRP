@@ -25,6 +25,8 @@ import {
   RefreshCw,
   Save,
   Search,
+  SlidersHorizontal,
+  Trophy,
   Trash2,
   UserCheck,
   UserRound,
@@ -34,6 +36,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   createRow,
+  createRows,
   formatValue,
   getEditableFields,
   getInitialValue,
@@ -277,6 +280,10 @@ const entityIcons: Record<EntityKey, LucideIcon> = {
   groups: UsersRound,
   assignments: FileText,
   pages: BookOpen,
+  pagePointAwards: Trophy,
+  manualPointTransactions: Trophy,
+  pagePointTiers: SlidersHorizontal,
+  points: Trophy,
   attendanceSessions: CalendarCheck,
   attendanceRecords: CheckCircle2,
 };
@@ -485,6 +492,64 @@ function searchRows<T extends CrudRow>(rows: T[], term: string, getText: (row: T
       searchTermMatchesText(searchTerm, searchableText),
     );
   });
+}
+
+function getEntityByKey(
+  entityDefinitions: EntityDefinition[],
+  schema: SchemaName,
+  key: EntityKey,
+) {
+  return findEntityDefinition(getEntityId(schema, key), entityDefinitions);
+}
+
+function getNumberValue(value: CrudValue | undefined) {
+  const numberValue = Number(value ?? 0);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function getStudentStats(
+  student: CrudRow,
+  pages: CrudRow[],
+  pageAwards: CrudRow[],
+  manualTransactions: CrudRow[],
+) {
+  const studentId = String(student.id);
+  const studentPages = pages.filter((page) => String(page.studentId) === studentId);
+  const pagePoints = pageAwards
+    .filter((award) => String(award.studentId) === studentId)
+    .reduce((sum, award) => sum + getNumberValue(award.points), 0);
+  const manualPoints = manualTransactions
+    .filter((transaction) => String(transaction.studentId) === studentId)
+    .reduce((sum, transaction) => sum + getNumberValue(transaction.amount), 0);
+
+  return {
+    manualPoints,
+    memorizedPages: studentPages.length,
+    pagePoints,
+    totalPoints: pagePoints + manualPoints,
+  };
+}
+
+function findTierForCount(tiers: CrudRow[], pageCount: number) {
+  return [...tiers]
+    .sort((left, right) => getNumberValue(right.minPages) - getNumberValue(left.minPages))
+    .find((tier) => {
+      const minPages = getNumberValue(tier.minPages);
+      const maxPages = tier.maxPages === null ? null : getNumberValue(tier.maxPages);
+      return pageCount >= minPages && (maxPages === null || pageCount <= maxPages);
+    });
+}
+
+function splitPoints(totalPoints: number, count: number) {
+  if (count <= 0) {
+    return [];
+  }
+
+  const base = Math.trunc(totalPoints / count);
+  const remainder = totalPoints - base * count;
+  return Array.from({ length: count }, (_, index) =>
+    index === count - 1 ? base + remainder : base,
+  );
 }
 
 function getRelationLabel(
@@ -839,6 +904,25 @@ function DetailView({
   onEdit: () => void;
   relationOptions: RelationOptions;
 }) {
+  const entityKey = getEntityKey(entity.id);
+  const pageRows = relationOptions[`${entity.schema}.pages` as EntityId] ?? [];
+  const pageAwards =
+    relationOptions[`${entity.schema}.pagePointAwards` as EntityId] ?? [];
+  const manualTransactions =
+    relationOptions[`${entity.schema}.manualPointTransactions` as EntityId] ?? [];
+  const studentStats =
+    entityKey === "students"
+      ? getStudentStats(row, pageRows, pageAwards, manualTransactions)
+      : null;
+  const recentPages = pageRows
+    .filter((page) => String(page.studentId) === String(row.id))
+    .slice(-5)
+    .reverse();
+  const recentManualTransactions = manualTransactions
+    .filter((transaction) => String(transaction.studentId) === String(row.id))
+    .slice(-5)
+    .reverse();
+
   return (
     <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -857,6 +941,42 @@ function DetailView({
           {ui.edit}
         </button>
       </div>
+
+      {studentStats ? (
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          {[
+            ["صفحات الحفظ", studentStats.memorizedPages],
+            ["نقاط الحفظ", studentStats.pagePoints],
+            ["النقاط اليدوية", studentStats.manualPoints],
+            ["المجموع", studentStats.totalPoints],
+          ].map(([label, value]) => (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={label}>
+              <p className="text-xs font-bold text-slate-500">{label}</p>
+              <p className="mt-2 text-2xl font-bold text-ink">{value}</p>
+            </div>
+          ))}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
+            <p className="text-sm font-bold text-ink">آخر صفحات الحفظ</p>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              {recentPages.length ? recentPages.map((page) => (
+                <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(page.id)}>
+                  صفحة {formatValue(page.page)} · {formatValue(page.memorizedOn)}
+                </p>
+              )) : <p className="text-slate-500">{ui.noRecords}</p>}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
+            <p className="text-sm font-bold text-ink">آخر حركات النقاط</p>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              {recentManualTransactions.length ? recentManualTransactions.map((transaction) => (
+                <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(transaction.id)}>
+                  {formatValue(transaction.amount)} · {formatValue(transaction.reason)}
+                </p>
+              )) : <p className="text-slate-500">{ui.noRecords}</p>}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <dl className="mt-5 grid gap-3 sm:grid-cols-2">
         {entity.fields.map((field) => (
@@ -928,6 +1048,7 @@ export function SchemaSettingsPage({
   schemas: SchemaName[];
   onSelect: (schema: SchemaName) => void;
 }) {
+  const entityDefinitions = useMemo(() => getEntityDefinitions(activeSchema), [activeSchema]);
   return (
     <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -960,7 +1081,395 @@ export function SchemaSettingsPage({
           </p>
         </div>
       </div>
+
+      <PageTierSettings activeSchema={activeSchema} entityDefinitions={entityDefinitions} />
     </section>
+  );
+}
+
+function PageTierSettings({
+  activeSchema,
+  entityDefinitions,
+}: {
+  activeSchema: SchemaName;
+  entityDefinitions: EntityDefinition[];
+}) {
+  const tierEntity = getEntityByKey(entityDefinitions, activeSchema, "pagePointTiers");
+  const [tiers, setTiers] = useState<CrudRow[]>([]);
+  const [draft, setDraft] = useState({ minPages: "1", maxPages: "", points: "10", name: "" });
+  const [error, setError] = useState<string | null>(null);
+
+  async function refreshTiers() {
+    if (!tierEntity) {
+      return;
+    }
+    setTiers(await listRows(tierEntity));
+  }
+
+  useEffect(() => {
+    void refreshTiers().catch((caughtError) =>
+      setError(caughtError instanceof Error ? caughtError.message : ui.loadError),
+    );
+  }, [tierEntity]);
+
+  async function handleAddTier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!tierEntity) {
+      return;
+    }
+    const minPages = Number(draft.minPages);
+    const maxPages = draft.maxPages ? Number(draft.maxPages) : null;
+    const points = Number(draft.points);
+    if (!Number.isInteger(minPages) || !Number.isInteger(points) || minPages < 1 || (maxPages !== null && (!Number.isInteger(maxPages) || maxPages < minPages))) {
+      setError("أدخل شريحة صحيحة.");
+      return;
+    }
+    await createRow(tierEntity, {
+      minPages,
+      maxPages,
+      points,
+      name: draft.name || `${minPages}${maxPages ? `-${maxPages}` : "+"} pages/day`,
+    });
+    setDraft({ minPages: "1", maxPages: "", points: "10", name: "" });
+    await refreshTiers();
+  }
+
+  async function handleTierChange(row: CrudRow, key: string, value: CrudValue) {
+    if (!tierEntity) {
+      return;
+    }
+    await updateRow(tierEntity, Number(row.id), { [key]: value });
+    await refreshTiers();
+  }
+
+  async function handleDeleteTier(row: CrudRow) {
+    if (!tierEntity) {
+      return;
+    }
+    await softDeleteRow(tierEntity, Number(row.id));
+    await refreshTiers();
+  }
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink">شرائح نقاط الحفظ</p>
+          <p className="mt-1 text-xs text-slate-500">تطبق على الصفحات الجديدة المحفوظة في الدفعة الواحدة.</p>
+        </div>
+        <SlidersHorizontal className="h-5 w-5 text-cedar" aria-hidden="true" />
+      </div>
+      {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
+      <div className="mt-4 grid gap-2">
+        {tiers.map((tier) => (
+          <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-5 md:items-center" key={String(tier.id)}>
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "name", event.target.value)} defaultValue={String(tier.name ?? "")} />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "minPages", Number(event.target.value))} defaultValue={String(tier.minPages ?? "")} type="number" min={1} />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "maxPages", event.target.value ? Number(event.target.value) : null)} defaultValue={tier.maxPages === null ? "" : String(tier.maxPages ?? "")} type="number" min={1} placeholder="بلا حد" />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "points", Number(event.target.value))} defaultValue={String(tier.points ?? "")} type="number" />
+            <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleDeleteTier(tier)} />
+          </div>
+        ))}
+      </div>
+      <form className="mt-4 grid gap-2 md:grid-cols-5" onSubmit={handleAddTier}>
+        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="اسم الشريحة" value={draft.name} />
+        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, minPages: event.target.value }))} type="number" value={draft.minPages} />
+        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="بلا حد" type="number" value={draft.maxPages} />
+        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, points: event.target.value }))} type="number" value={draft.points} />
+        <button className="rounded-xl bg-cedar px-3 py-2 text-sm font-bold text-white" type="submit">إضافة شريحة</button>
+      </form>
+    </div>
+  );
+}
+
+function PointsWorkspace({
+  activeSchema,
+  entityDefinitions,
+  relationOptions,
+  onRefresh,
+  onNavigateStudent,
+}: {
+  activeSchema: SchemaName;
+  entityDefinitions: EntityDefinition[];
+  relationOptions: RelationOptions;
+  onRefresh: () => Promise<void>;
+  onNavigateStudent: (student: CrudRow) => void;
+}) {
+  const [rankMode, setRankMode] = useState<"points" | "pages" | "recent">("points");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [search, setSearch] = useState("");
+  const [manualStudentId, setManualStudentId] = useState("");
+  const [manualDate, setManualDate] = useState(getTodayDateString());
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualReason, setManualReason] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
+  const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
+  const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
+  const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
+  const awards = relationOptions[`${activeSchema}.pagePointAwards` as EntityId] ?? [];
+  const manual = relationOptions[`${activeSchema}.manualPointTransactions` as EntityId] ?? [];
+  const manualEntity = getEntityByKey(
+    entityDefinitions,
+    activeSchema,
+    "manualPointTransactions",
+  );
+
+  useEffect(() => {
+    if (!manualStudentId && students[0]?.id !== undefined) {
+      setManualStudentId(String(students[0].id));
+    }
+  }, [manualStudentId, students]);
+
+  async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setManualError(null);
+    const amount = Number(manualAmount);
+
+    if (!manualEntity || !manualStudentId || !Number.isInteger(amount) || !manualReason.trim()) {
+      setManualError("اختر الطالب وأدخل مقدار النقاط والسبب.");
+      return;
+    }
+
+    try {
+      await createRow(manualEntity, {
+        studentId: Number(manualStudentId),
+        transactionDate: manualDate,
+        amount,
+        reason: manualReason.trim(),
+      });
+      setManualAmount("");
+      setManualReason("");
+      await onRefresh();
+    } catch (caughtError) {
+      setManualError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  function isInRange(value: CrudValue | undefined) {
+    const date = String(value ?? "").slice(0, 10);
+    return (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
+  }
+
+  const rankedStudents = searchRows(students, search, (student) => getStudentName(student))
+    .map((student) => {
+      const stats = getStudentStats(student, pages, awards, manual);
+      const studentId = String(student.id);
+      const recentPagePoints = awards
+        .filter((award) => String(award.studentId) === studentId && isInRange(award.createdAt))
+        .reduce((sum, award) => sum + getNumberValue(award.points), 0);
+      const recentManualPoints = manual
+        .filter((transaction) => String(transaction.studentId) === studentId && isInRange(transaction.transactionDate))
+        .reduce((sum, transaction) => sum + getNumberValue(transaction.amount), 0);
+      return { student, stats, recentPoints: recentPagePoints + recentManualPoints };
+    })
+    .sort((left, right) => {
+      if (rankMode === "pages") {
+        return right.stats.memorizedPages - left.stats.memorizedPages;
+      }
+      if (rankMode === "recent") {
+        return right.recentPoints - left.recentPoints;
+      }
+      return right.stats.totalPoints - left.stats.totalPoints;
+    });
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
+      <div className="space-y-3 border-b border-slate-200/80 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
+            <h2 className="mt-1 text-2xl font-bold text-ink">ترتيب الطلاب والحفظ</h2>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setRankMode(event.target.value as typeof rankMode)} value={rankMode}>
+              <option value="points">حسب مجموع النقاط</option>
+              <option value="pages">حسب صفحات الحفظ</option>
+              <option value="recent">حسب النشاط ضمن الفترة</option>
+            </select>
+            <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+            <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+            <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="بحث عن طالب" value={search} />
+          </div>
+        </div>
+      </div>
+      <form className="grid gap-2 border-b border-slate-200/80 bg-slate-50/70 p-4 md:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.65fr))_auto]" onSubmit={handleManualSubmit}>
+        <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualStudentId(event.target.value)} value={manualStudentId}>
+          {students.map((student) => (
+            <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
+          ))}
+        </select>
+        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualDate(event.target.value)} type="date" value={manualDate} />
+        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualAmount(event.target.value)} placeholder="نقاط + أو -" type="number" value={manualAmount} />
+        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualReason(event.target.value)} placeholder="السبب" value={manualReason} />
+        <button className="rounded-xl bg-ink px-3 py-2 text-sm font-bold text-white" type="submit">إضافة حركة</button>
+        {manualError ? <p className="text-sm text-amber-800 md:col-span-5">{manualError}</p> : null}
+      </form>
+      <div className="overflow-x-auto">
+        <table className="w-full divide-y divide-slate-200 text-right text-sm">
+          <thead className="bg-mist/70">
+            <tr>
+              {["الترتيب", "الطالب", "المجموعة", "الصفحات", "نقاط الحفظ", "يدوي", "المجموع", "الفترة", ""].map((label) => (
+                <th className="px-3 py-2 font-bold text-slate-600" key={label}>{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rankedStudents.map(({ student, stats, recentPoints }, index) => {
+              const group = groups.find((currentGroup) => String(currentGroup.id) === String(student.groupId));
+              return (
+                <tr className="hover:bg-cedar/5" key={String(student.id)}>
+                  <td className="px-3 py-2 font-bold text-cedar">#{index + 1}</td>
+                  <td className="px-3 py-2 font-bold text-ink">{getStudentName(student)}</td>
+                  <td className="px-3 py-2 text-slate-600">{formatValue(group?.name)}</td>
+                  <td className="px-3 py-2">{stats.memorizedPages}</td>
+                  <td className="px-3 py-2">{stats.pagePoints}</td>
+                  <td className="px-3 py-2">{stats.manualPoints}</td>
+                  <td className="px-3 py-2 font-bold text-ink">{stats.totalPoints}</td>
+                  <td className="px-3 py-2">{recentPoints}</td>
+                  <td className="px-3 py-2">
+                    <ActionButton compact icon={Eye} label={ui.view} onClick={() => onNavigateStudent(student)} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function MemorizationWorkspace({
+  activeSchema,
+  entityDefinitions,
+  onCreated,
+  relationOptions,
+}: {
+  activeSchema: SchemaName;
+  entityDefinitions: EntityDefinition[];
+  onCreated: () => Promise<void>;
+  relationOptions: RelationOptions;
+}) {
+  const [studentId, setStudentId] = useState("");
+  const [fromPage, setFromPage] = useState("");
+  const [toPage, setToPage] = useState("");
+  const [memorizedOn, setMemorizedOn] = useState(getTodayDateString());
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
+  const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
+  const tiers = relationOptions[`${activeSchema}.pagePointTiers` as EntityId] ?? [];
+  const pagesEntity = getEntityByKey(entityDefinitions, activeSchema, "pages");
+  const awardsEntity = getEntityByKey(entityDefinitions, activeSchema, "pagePointAwards");
+
+  useEffect(() => {
+    if (!studentId && students[0]?.id !== undefined) {
+      setStudentId(String(students[0].id));
+    }
+  }, [studentId, students]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const firstPage = Number(fromPage);
+    const lastPage = Number(toPage || fromPage);
+    const normalizedStart = Math.min(firstPage, lastPage);
+    const normalizedEnd = Math.max(firstPage, lastPage);
+
+    if (!pagesEntity || !awardsEntity || !studentId || !Number.isInteger(firstPage) || !Number.isInteger(lastPage) || normalizedStart < 1 || normalizedEnd > 604) {
+      setError("أدخل طالبا وصفحة أو نطاقا صحيحا بين 1 و604.");
+      return;
+    }
+
+    const requestedPages = Array.from({ length: normalizedEnd - normalizedStart + 1 }, (_, index) => normalizedStart + index);
+    const duplicatePages = requestedPages.filter((page) =>
+      pages.some((existingPage) => String(existingPage.studentId) === studentId && Number(existingPage.page) === page),
+    );
+
+    if (duplicatePages.length) {
+      setError(`هذه الصفحات مسجلة مسبقا لهذا الطالب: ${duplicatePages.join(", ")}`);
+      return;
+    }
+
+    const tier = findTierForCount(tiers, requestedPages.length);
+    const totalPoints = getNumberValue(tier?.points);
+    const pointSplit = splitPoints(totalPoints, requestedPages.length);
+    const ruleName = String(tier?.name ?? `${requestedPages.length} page/day`);
+    const snapshot = `${requestedPages.length} pages on ${memorizedOn}: ${totalPoints} points`;
+
+    setIsSaving(true);
+    try {
+      const createdPages = await createRows(
+        pagesEntity,
+        requestedPages.map((page) => ({
+          studentId: Number(studentId),
+          page,
+          memorizedOn,
+        })),
+      );
+      try {
+        await createRows(
+          awardsEntity,
+          createdPages.map((page, index) => ({
+            memorizationPageId: Number(page.id),
+            studentId: Number(studentId),
+            ruleName,
+            snapshot,
+            points: pointSplit[index] ?? 0,
+          })),
+        );
+      } catch (awardError) {
+        await Promise.all(
+          createdPages
+            .map((page) => Number(page.id))
+            .filter((id) => Number.isFinite(id))
+            .map((id) => softDeleteRow(pagesEntity, id)),
+        );
+        throw awardError;
+      }
+      setFromPage("");
+      setToPage("");
+      await onCreated();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <form className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5" onSubmit={handleSubmit}>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-end">
+          <label className="text-sm font-bold text-slate-700">
+            الطالب
+            <select className={inputClass} onChange={(event) => setStudentId(event.target.value)} value={studentId}>
+              {students.map((student) => (
+                <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-bold text-slate-700">
+            من صفحة
+            <input className={inputClass} min={1} max={604} onChange={(event) => setFromPage(event.target.value)} type="number" value={fromPage} />
+          </label>
+          <label className="text-sm font-bold text-slate-700">
+            إلى صفحة
+            <input className={inputClass} min={1} max={604} onChange={(event) => setToPage(event.target.value)} placeholder="اختياري" type="number" value={toPage} />
+          </label>
+          <label className="text-sm font-bold text-slate-700">
+            التاريخ
+            <input className={inputClass} onChange={(event) => setMemorizedOn(event.target.value)} type="date" value={memorizedOn} />
+          </label>
+          <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cedar px-4 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60" disabled={isSaving} type="submit">
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            حفظ
+          </button>
+        </div>
+        {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
+      </form>
+    </div>
   );
 }
 
@@ -1138,6 +1647,7 @@ function AttendanceWorkspace({
               مركز سجلات الحضور
             </h2>
           </div>
+          {availableModes.length > 1 ? (
           <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 text-xs font-bold sm:flex">
             {[
               ...availableModes,
@@ -1162,6 +1672,7 @@ function AttendanceWorkspace({
               );
             })}
           </div>
+          ) : null}
           {!isTakingPage ? (
             <button
               className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-cedar px-3 text-sm font-bold text-white shadow-lg shadow-cedar/15 transition hover:bg-palm"
@@ -1176,8 +1687,8 @@ function AttendanceWorkspace({
       </div>
 
       {viewMode === "student" ? (
-        <div className="grid gap-4 p-3 lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)] lg:p-4">
-          <div className="space-y-3">
+        <div className="grid items-stretch gap-4 p-3 lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)] lg:p-4">
+          <div className="flex min-h-0 flex-col gap-3">
             <label className="relative block">
               <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
@@ -1188,7 +1699,7 @@ function AttendanceWorkspace({
                 value={studentSearch}
               />
             </label>
-            <div className="max-h-80 space-y-2 overflow-y-auto pe-1">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pe-1">
               {filteredStudents.map((student) => {
                 const studentGroup = groups.find((group) => String(group.id) === String(student.groupId));
                 const color = getGroupColorByCode(studentGroup?.colorCode);
@@ -1355,11 +1866,11 @@ function AttendanceWorkspace({
 
       {viewMode === "taking" ? (
         <div className="space-y-4 p-3 lg:p-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="text-sm font-bold text-slate-700">
+          <div className="grid min-w-0 gap-3 xl:grid-cols-3">
+            <label className="min-w-0 text-sm font-bold text-slate-700">
               جلسة الحضور
               <select
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
                 onChange={(event) => setSelectedSessionId(event.target.value)}
                 value={String(selectedSession?.id ?? "")}
               >
@@ -1370,9 +1881,9 @@ function AttendanceWorkspace({
                 ))}
               </select>
             </label>
-            <label className="text-sm font-bold text-slate-700">
+            <label className="min-w-0 text-sm font-bold text-slate-700">
               المجموعة
-              <div className="mt-2 flex gap-2 overflow-x-auto rounded-xl bg-slate-100 p-1">
+              <div className="mt-2 flex min-w-0 flex-wrap gap-2 overflow-hidden rounded-xl bg-slate-100 p-1">
                 {groups.map((group) => {
                   const color = getGroupColorByCode(group.colorCode);
                   const isSelected = String(group.id) === String(selectedGroup?.id);
@@ -1380,7 +1891,7 @@ function AttendanceWorkspace({
                   return (
                     <button
                       aria-pressed={isSelected}
-                      className={`inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition ${
+                      className={`inline-flex min-h-10 min-w-0 flex-1 basis-[9rem] items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition ${
                         isSelected
                           ? `${color?.chip ?? "border-cedar bg-white text-cedar"} shadow-sm`
                           : "border-transparent bg-transparent text-slate-600 hover:bg-white/70"
@@ -1394,17 +1905,17 @@ function AttendanceWorkspace({
                         className={`h-2.5 w-2.5 rounded-full ${color?.marker ?? "bg-slate-400"}`}
                         style={color?.style}
                       />
-                      <span className="max-w-32 truncate">{formatValue(group.name)}</span>
+                      <span className="min-w-0 truncate">{formatValue(group.name)}</span>
                     </button>
                   );
                 })}
               </div>
             </label>
-            <label className="relative block text-sm font-bold text-slate-700">
+            <label className="relative block min-w-0 text-sm font-bold text-slate-700">
               بحث داخل القائمة
               <Search className="pointer-events-none absolute right-4 top-[2.65rem] h-4 w-4 text-slate-400" aria-hidden="true" />
               <input
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
+                className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
                 onChange={(event) => setRosterSearch(event.target.value)}
                 placeholder="اسم الطالب أو رقمه"
                 type="search"
@@ -1541,6 +2052,32 @@ export function CrudDashboard({
         entityIds.push(`${activeSchema}.groups` as EntityId);
       }
 
+      if (activeEntityKey === "students") {
+        entityIds.push(
+          `${activeSchema}.pages` as EntityId,
+          `${activeSchema}.pagePointAwards` as EntityId,
+          `${activeSchema}.manualPointTransactions` as EntityId,
+        );
+      }
+
+      if (activeEntityKey === "pages") {
+        entityIds.push(
+          `${activeSchema}.students` as EntityId,
+          `${activeSchema}.pagePointAwards` as EntityId,
+          `${activeSchema}.pagePointTiers` as EntityId,
+        );
+      }
+
+      if (activeEntityKey === "points") {
+        entityIds.push(
+          `${activeSchema}.students` as EntityId,
+          `${activeSchema}.groups` as EntityId,
+          `${activeSchema}.pages` as EntityId,
+          `${activeSchema}.pagePointAwards` as EntityId,
+          `${activeSchema}.manualPointTransactions` as EntityId,
+        );
+      }
+
       return Array.from(new Set(entityIds));
     },
     [activeEntity, activeEntityKey, activeSchema],
@@ -1557,6 +2094,23 @@ export function CrudDashboard({
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function refreshRelationOptions() {
+    const entries = await Promise.all(
+      relationEntityIds.map(async (entityId) => {
+        const entity = findEntityDefinition(entityId, entityDefinitions);
+        return entity ? ([entityId, await listRows(entity)] as const) : null;
+      }),
+    );
+
+    setRelationOptions(
+      Object.fromEntries(
+        entries.filter((entry): entry is [EntityId, CrudRow[]] =>
+          Boolean(entry),
+        ),
+      ),
+    );
   }
 
   useEffect(() => {
@@ -1580,27 +2134,12 @@ export function CrudDashboard({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadRelationOptions() {
-      const entries = await Promise.all(
-        relationEntityIds.map(async (entityId) => {
-          const entity = findEntityDefinition(entityId, entityDefinitions);
-          return entity ? ([entityId, await listRows(entity)] as const) : null;
-        }),
-      );
-
-      if (isMounted) {
-        setRelationOptions(
-          Object.fromEntries(
-            entries.filter((entry): entry is [EntityId, CrudRow[]] =>
-              Boolean(entry),
-            ),
-          ),
-        );
-      }
-    }
-
     if (relationEntityIds.length) {
-      void loadRelationOptions().catch(() => setRelationOptions({}));
+      void refreshRelationOptions().catch(() => {
+        if (isMounted) {
+          setRelationOptions({});
+        }
+      });
     } else {
       setRelationOptions({});
     }
@@ -1836,7 +2375,36 @@ export function CrudDashboard({
           </p>
         ) : null}
 
-        {mode === "create" && activeEntityKey !== "attendanceRecords" ? (
+        {activeEntityKey === "points" ? (
+          <PointsWorkspace
+            activeSchema={activeSchema}
+            entityDefinitions={entityDefinitions}
+            onRefresh={refreshRelationOptions}
+            onNavigateStudent={(student) =>
+              navigateDashboard({
+                entity: "students",
+                mode: "detail",
+                rowId: student.id,
+                search: {},
+              })
+            }
+            relationOptions={relationOptions}
+          />
+        ) : null}
+
+        {activeEntityKey === "pages" ? (
+          <MemorizationWorkspace
+            activeSchema={activeSchema}
+            entityDefinitions={entityDefinitions}
+            onCreated={async () => {
+              await refreshRows();
+              await refreshRelationOptions();
+            }}
+            relationOptions={relationOptions}
+          />
+        ) : null}
+
+        {mode === "create" && !["attendanceRecords", "pages", "points"].includes(activeEntityKey) ? (
           <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
             <h2 className="mb-5 text-xl font-bold text-ink">
               {ui.create} {activeEntity.singularLabel}
@@ -1854,7 +2422,7 @@ export function CrudDashboard({
           </div>
         ) : null}
 
-        {mode === "edit" && selectedRow && activeEntityKey !== "attendanceRecords" ? (
+        {mode === "edit" && selectedRow && !["attendanceRecords", "points"].includes(activeEntityKey) ? (
           <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
             <h2 className="mb-5 text-xl font-bold text-ink">
               {ui.edit} {getRowLabel(activeEntity, selectedRow)}
@@ -1879,7 +2447,7 @@ export function CrudDashboard({
           </div>
         ) : null}
 
-        {mode === "detail" && selectedRow ? (
+        {mode === "detail" && selectedRow && activeEntityKey !== "points" ? (
           <DetailView
             entity={activeEntity}
             entityDefinitions={entityDefinitions}
@@ -1931,7 +2499,7 @@ export function CrudDashboard({
           />
         ) : null}
 
-        {!attendanceTaking ? (
+        {!attendanceTaking && activeEntityKey !== "points" ? (
         <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
           <div className="space-y-2 border-b border-slate-200/80 px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
@@ -1951,7 +2519,7 @@ export function CrudDashboard({
                 >
                   <RefreshCw className="h-5 w-5" aria-hidden="true" />
                 </button>
-                {activeEntityKey !== "attendanceRecords" ? (
+                {!["attendanceRecords", "pages", "points"].includes(activeEntityKey) ? (
                   <button
                     aria-label={`${ui.add} ${activeEntity.singularLabel}`}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm sm:h-10 sm:w-10"

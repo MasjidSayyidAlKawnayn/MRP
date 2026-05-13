@@ -152,6 +152,26 @@ export async function createRow(
     : null;
 }
 
+export async function createRows(
+  entity: EntityDefinition,
+  values: Record<string, CrudValue>[],
+) {
+  if (values.length === 0) {
+    return [];
+  }
+
+  const client = getSchemaClient(entity.schema);
+  const response = await client
+    .from(entity.table)
+    .insert(values.map((value) => toDbPayload(entity, value)))
+    .select();
+
+  throwIfError(response.error);
+  return ((response.data ?? []) as Record<string, unknown>[]).map((row) =>
+    toAppRow(entity, row),
+  );
+}
+
 export async function updateRow(
   entity: EntityDefinition,
   id: number,
