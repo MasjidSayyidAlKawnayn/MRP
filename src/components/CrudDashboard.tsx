@@ -25,7 +25,9 @@ import {
   RefreshCw,
   Save,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
+  Undo2,
   Trophy,
   Trash2,
   UserCheck,
@@ -35,15 +37,24 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
+  createAdminUser,
   createRow,
   createRows,
+  createCourse,
+  deleteAdminUser,
   formatValue,
   getEditableFields,
   getInitialValue,
   getRowLabel,
+  listAdminUsers,
   listRows,
+  softDeleteCourse,
   softDeleteRow,
+  updateAdminUser,
+  updateCourse,
   updateRow,
+  type AdminUser,
+  type Course,
   type CrudRow,
   type CrudValue,
 } from "../crud/data";
@@ -58,6 +69,7 @@ import {
 } from "../crud/entities";
 import {
   cleanSearch,
+  coursePath,
   dashboardPath,
   decodeDraft,
   encodeDraft,
@@ -703,6 +715,9 @@ function EntityNav({
 }
 
 const inputClass =
+  "mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-ink shadow-sm transition placeholder:text-slate-400 focus:border-cedar sm:text-sm";
+
+const textareaClass =
   "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-ink shadow-sm transition placeholder:text-slate-400 focus:border-cedar sm:text-sm";
 
 function EntityForm({
@@ -779,7 +794,9 @@ function EntityForm({
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => (
           <label
-            className={field.type === "textarea" ? "sm:col-span-2" : undefined}
+            className={`flex min-w-0 flex-col ${
+              field.type === "textarea" ? "sm:col-span-2" : ""
+            }`}
             key={field.key}
           >
             <span className="text-sm font-bold text-slate-700">
@@ -816,7 +833,7 @@ function EntityForm({
               </select>
             ) : field.type === "textarea" ? (
               <textarea
-                className={`${inputClass} min-h-32 resize-y leading-7`}
+                className={`${textareaClass} min-h-32 resize-y leading-7`}
                 onChange={(event) => updateField(field, event.target.value)}
                 required={field.required}
                 value={toInputValue(values[field.key] ?? null, field)}
@@ -997,58 +1014,701 @@ function DetailView({
   );
 }
 
-export function getConfiguredSchemas() {
-  const configuredSchemas = import.meta.env.VITE_NEON_SCHEMAS;
+const courseUi = {
+  active: "\u0646\u0634\u0637\u0629",
+  back: "\u0631\u062C\u0648\u0639",
+  cancel: "\u0625\u0644\u063A\u0627\u0621",
+  courseDetails: "\u062A\u0641\u0627\u0635\u064A\u0644 \u0627\u0644\u062F\u0648\u0631\u0629",
+  coursesTitle: "\u0627\u0644\u062F\u0648\u0631\u0627\u062A",
+  deleteBody:
+    "\u0633\u064A\u062A\u0645 \u0625\u062E\u0641\u0627\u0621 \u0647\u0630\u0647 \u0627\u0644\u062F\u0648\u0631\u0629 \u0645\u0646 \u0627\u0644\u0642\u0648\u0627\u0626\u0645\u060C \u0645\u0639 \u0627\u0644\u0627\u062D\u062A\u0641\u0627\u0638 \u0628\u0628\u064A\u0627\u0646\u0627\u062A\u0647\u0627 \u0627\u0644\u0645\u0631\u062A\u0628\u0637\u0629.",
+  deleteTitle: "\u062D\u0630\u0641 \u0627\u0644\u062F\u0648\u0631\u0629",
+  description: "\u0627\u0644\u0648\u0635\u0641",
+  inactive: "\u0645\u0639\u0637\u0644\u0629",
+  name: "\u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629",
+  newCourse: "\u062F\u0648\u0631\u0629 \u062C\u062F\u064A\u062F\u0629",
+  noCourses: "\u0644\u0627 \u062A\u0648\u062C\u062F \u062F\u0648\u0631\u0627\u062A \u0628\u0639\u062F.",
+  notFound: "\u0644\u0645 \u064A\u062A\u0645 \u0627\u0644\u0639\u062B\u0648\u0631 \u0639\u0644\u0649 \u0647\u0630\u0647 \u0627\u0644\u062F\u0648\u0631\u0629.",
+  openDashboard: "\u0641\u062A\u062D \u0644\u0648\u062D\u0629 \u0627\u0644\u062F\u0648\u0631\u0629",
+  saveChanges: "\u062D\u0641\u0638 \u0627\u0644\u062A\u0639\u062F\u064A\u0644\u0627\u062A",
+  slug: "\u0631\u0627\u0628\u0637 \u0627\u0644\u062F\u0648\u0631\u0629",
+};
 
-  if (!configuredSchemas) {
-    return ["mqs"];
-  }
-
-  const schemas = configuredSchemas
-    .split(",")
-    .map((schema) => schema.trim())
-    .filter(Boolean);
-
-  return schemas.length ? schemas : ["mqs"];
-}
-
-function SchemaPicker({
-  activeSchema,
-  schemas,
-  onSelect,
-}: {
-  activeSchema: SchemaName;
-  schemas: SchemaName[];
-  onSelect: (schema: SchemaName) => void;
-}) {
+function CourseStatusBadge({ course }: { course: Course }) {
   return (
-    <label className="flex w-full flex-col gap-2 text-sm font-bold text-slate-700 sm:min-w-48 sm:w-auto">
-      <span>{ui.schema}</span>
-      <select
-        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
-        onChange={(event) => onSelect(event.target.value)}
-        value={activeSchema}
-      >
-        {schemas.map((schema) => (
-          <option key={schema} value={schema}>
-            {schema}
-          </option>
-        ))}
-      </select>
-    </label>
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${
+        course.isActive
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-slate-200 bg-slate-100 text-slate-600"
+      }`}
+    >
+      {course.isActive ? courseUi.active : courseUi.inactive}
+    </span>
   );
 }
 
-export function SchemaSettingsPage({
-  activeSchema,
-  schemas,
-  onSelect,
+function CourseForm({
+  course,
+  error,
+  onCancel,
+  onSubmit,
+  submitLabel,
 }: {
+  course?: Course | null;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (values: {
+    description: string;
+    isActive: boolean;
+    name: string;
+    slug: string;
+  }) => Promise<void>;
+  submitLabel: string;
+}) {
+  const [draft, setDraft] = useState({
+    description: course?.description ?? "",
+    isActive: course?.isActive ?? true,
+    name: course?.name ?? "",
+    slug: course?.slug ?? "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setDraft({
+      description: course?.description ?? "",
+      isActive: course?.isActive ?? true,
+      name: course?.name ?? "",
+      slug: course?.slug ?? "",
+    });
+  }, [course]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit(draft);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="grid gap-4" onSubmit={handleSubmit}>
+      {error ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {error}
+        </p>
+      ) : null}
+      <label className="grid gap-2 text-sm font-bold text-slate-700">
+        <span>{courseUi.name}</span>
+        <input
+          className="arabic-readable min-h-12 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, name: event.target.value }))
+          }
+          value={draft.name}
+        />
+      </label>
+      <label className="grid gap-2 text-sm font-bold text-slate-700">
+        <span>{courseUi.slug}</span>
+        <input
+          className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-left text-sm"
+          dir="ltr"
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, slug: event.target.value }))
+          }
+          placeholder="course-slug"
+          value={draft.slug}
+        />
+      </label>
+      <label className="grid gap-2 text-sm font-bold text-slate-700">
+        <span>{courseUi.description}</span>
+        <textarea
+          className="min-h-28 min-w-0 resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              description: event.target.value,
+            }))
+          }
+          value={draft.description}
+        />
+      </label>
+      <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
+        <input
+          checked={draft.isActive}
+          className="h-4 w-4 accent-cedar"
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              isActive: event.target.checked,
+            }))
+          }
+          type="checkbox"
+        />
+        <span>{courseUi.active}</span>
+      </label>
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          onClick={onCancel}
+          type="button"
+        >
+          {courseUi.cancel}
+        </button>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cedar px-4 text-sm font-bold text-white transition hover:bg-palm disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isSubmitting}
+          type="submit"
+        >
+          {isSubmitting ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Save className="h-4 w-4" aria-hidden="true" />
+          )}
+          <span>{submitLabel}</span>
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function CourseListPage({ courses }: { courses: Course[] }) {
+  const navigate = useNavigate();
+
+  return (
+    <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-cedar">{courseUi.coursesTitle}</p>
+          <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
+            {courseUi.coursesTitle}
+          </h1>
+        </div>
+        <button
+          aria-label={courseUi.newCourse}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+          onClick={() => void navigate({ to: coursePath({ mode: "create" }) })}
+          title={courseUi.newCourse}
+          type="button"
+        >
+          <Plus className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3">
+        {courses.length === 0 ? (
+          <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            {courseUi.noCourses}
+          </p>
+        ) : (
+          courses.map((course) => (
+            <div
+              className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              key={course.id}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="arabic-readable min-w-0 break-words text-base font-bold text-ink">
+                    {course.name}
+                  </p>
+                  <CourseStatusBadge course={course} />
+                </div>
+                <p className="mt-1 break-all text-xs font-semibold text-slate-500">
+                  /{course.slug}
+                </p>
+                {course.description ? (
+                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+                    {course.description}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <ActionButton
+                  compact
+                  icon={Eye}
+                  label={ui.view}
+                  onClick={() =>
+                    void navigate({
+                      to: coursePath({
+                        courseSlug: course.slug,
+                        mode: "detail",
+                      }),
+                    })
+                  }
+                />
+                <ActionButton
+                  compact
+                  icon={Pencil}
+                  label={ui.edit}
+                  onClick={() =>
+                    void navigate({
+                      to: coursePath({
+                        courseSlug: course.slug,
+                        mode: "edit",
+                      }),
+                    })
+                  }
+                />
+                <ActionButton
+                  compact
+                  danger
+                  icon={Trash2}
+                  label={ui.delete}
+                  onClick={() =>
+                    void navigate({
+                      to: coursePath({
+                        courseSlug: course.slug,
+                        mode: "delete",
+                      }),
+                    })
+                  }
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function CourseCreatePage({
+  onCoursesChanged,
+}: {
+  onCoursesChanged: () => Promise<void>;
+}) {
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(values: {
+    description: string;
+    isActive: boolean;
+    name: string;
+    slug: string;
+  }) {
+    setError(null);
+
+    if (!values.name.trim()) {
+      setError("\u0623\u062F\u062E\u0644 \u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629.");
+      return;
+    }
+
+    try {
+      const course = await createCourse({
+        description: values.description,
+        isActive: values.isActive,
+        name: values.name,
+        slug: values.slug || values.name,
+      });
+      await onCoursesChanged();
+      if (course) {
+        void navigate({
+          to: coursePath({ courseSlug: course.slug, mode: "detail" }),
+        });
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+      <div className="mb-5">
+        <p className="text-sm font-bold text-cedar">{courseUi.coursesTitle}</p>
+        <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
+          {courseUi.newCourse}
+        </h1>
+      </div>
+      <CourseForm
+        error={error}
+        onCancel={() => void navigate({ to: coursePath({ mode: "list" }) })}
+        onSubmit={handleSubmit}
+        submitLabel={ui.create}
+      />
+    </section>
+  );
+}
+
+function CourseNotFound() {
+  const navigate = useNavigate();
+
+  return (
+    <section className="rounded-3xl border border-amber-100 bg-white/90 p-6 shadow-xl shadow-amber-950/5">
+      <p className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+        {courseUi.notFound}
+      </p>
+      <div className="mt-4">
+        <button
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          onClick={() => void navigate({ to: coursePath({ mode: "list" }) })}
+          type="button"
+        >
+          {courseUi.back}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function CourseDetailPage({ course }: { course: Course | null }) {
+  const navigate = useNavigate();
+
+  if (!course) {
+    return <CourseNotFound />;
+  }
+
+  return (
+    <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-cedar">{courseUi.courseDetails}</p>
+          <h1 className="arabic-readable mt-1 break-words text-2xl font-bold text-ink sm:text-3xl">
+            {course.name}
+          </h1>
+          <p className="mt-1 break-all text-xs font-semibold text-slate-500">
+            /{course.slug}
+          </p>
+        </div>
+        <CourseStatusBadge course={course} />
+      </div>
+
+      <dl className="mt-6 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <dt className="text-xs font-bold text-slate-500">{courseUi.name}</dt>
+          <dd className="arabic-readable mt-2 break-words text-sm font-semibold text-ink">
+            {course.name}
+          </dd>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <dt className="text-xs font-bold text-slate-500">{courseUi.slug}</dt>
+          <dd className="mt-2 break-all text-sm font-semibold text-ink">
+            {course.slug}
+          </dd>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+          <dt className="text-xs font-bold text-slate-500">
+            {courseUi.description}
+          </dt>
+          <dd className="mt-2 break-words text-sm font-semibold leading-7 text-ink">
+            {course.description || ui.none}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <button
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          onClick={() => void navigate({ to: coursePath({ mode: "list" }) })}
+          type="button"
+        >
+          {courseUi.back}
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          onClick={() =>
+            void navigate({
+              to: coursePath({ courseSlug: course.slug, mode: "edit" }),
+            })
+          }
+          type="button"
+        >
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          <span>{ui.edit}</span>
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-800 transition hover:bg-amber-100"
+          onClick={() =>
+            void navigate({
+              to: coursePath({ courseSlug: course.slug, mode: "delete" }),
+            })
+          }
+          type="button"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          <span>{ui.delete}</span>
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center rounded-xl bg-cedar px-4 text-sm font-bold text-white transition hover:bg-palm"
+          onClick={() =>
+            void navigate({
+              to: dashboardPath({
+                courseSlug: course.slug,
+                entity: "students",
+              }),
+            })
+          }
+          type="button"
+        >
+          {courseUi.openDashboard}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function CourseEditPage({
+  course,
+  onCoursesChanged,
+}: {
+  course: Course | null;
+  onCoursesChanged: () => Promise<void>;
+}) {
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+
+  if (!course) {
+    return <CourseNotFound />;
+  }
+
+  async function handleSubmit(values: {
+    description: string;
+    isActive: boolean;
+    name: string;
+    slug: string;
+  }) {
+    if (!course) {
+      return;
+    }
+
+    setError(null);
+
+    if (!values.name.trim()) {
+      setError("\u0623\u062F\u062E\u0644 \u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629.");
+      return;
+    }
+
+    try {
+      const updatedCourse = await updateCourse(course.id, {
+        description: values.description,
+        isActive: values.isActive,
+        name: values.name,
+        slug: values.slug || values.name,
+      });
+      await onCoursesChanged();
+      if (updatedCourse) {
+        void navigate({
+          to: coursePath({
+            courseSlug: updatedCourse.slug,
+            mode: "detail",
+          }),
+        });
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
+      <div className="mb-5">
+        <p className="text-sm font-bold text-cedar">{courseUi.coursesTitle}</p>
+        <h1 className="mt-1 text-2xl font-bold text-ink sm:text-3xl">
+          {ui.edit} {course.name}
+        </h1>
+      </div>
+      <CourseForm
+        course={course}
+        error={error}
+        onCancel={() =>
+          void navigate({
+            to: coursePath({ courseSlug: course.slug, mode: "detail" }),
+          })
+        }
+        onSubmit={handleSubmit}
+        submitLabel={courseUi.saveChanges}
+      />
+    </section>
+  );
+}
+
+export function CourseDeletePage({
+  course,
+  onCoursesChanged,
+}: {
+  course: Course | null;
+  onCoursesChanged: () => Promise<void>;
+}) {
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  if (!course) {
+    return <CourseNotFound />;
+  }
+
+  async function handleDelete() {
+    if (!course) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      await softDeleteCourse(course.id);
+      await onCoursesChanged();
+      void navigate({ to: coursePath({ mode: "list" }) });
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-amber-100 bg-white/90 p-4 shadow-xl shadow-amber-950/5 sm:p-5">
+      <p className="text-sm font-bold text-amber-800">{courseUi.deleteTitle}</p>
+      <h1 className="arabic-readable mt-1 break-words text-2xl font-bold text-ink sm:text-3xl">
+        {course.name}
+      </h1>
+      <p className="mt-1 break-all text-xs font-semibold text-slate-500">
+        /{course.slug}
+      </p>
+      <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-700">
+        {courseUi.deleteBody}
+      </p>
+      {error ? (
+        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <button
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          onClick={() =>
+            void navigate({
+              to: coursePath({ courseSlug: course.slug, mode: "detail" }),
+            })
+          }
+          type="button"
+        >
+          {courseUi.cancel}
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 text-sm font-bold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isDeleting}
+          onClick={() => void handleDelete()}
+          type="button"
+        >
+          {isDeleting ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          )}
+          <span>{ui.delete}</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function CourseSettingsPage({
+  activeCourse,
+  activeSchema,
+  courses,
+  onCoursesChanged,
+  onSelect,
+  showAdminSections = true,
+}: {
+  activeCourse: Course | null;
   activeSchema: SchemaName;
-  schemas: SchemaName[];
-  onSelect: (schema: SchemaName) => void;
+  courses: Course[];
+  onCoursesChanged: () => Promise<void>;
+  onSelect: (course: Course) => void;
+  showAdminSections?: boolean;
 }) {
   const entityDefinitions = useMemo(() => getEntityDefinitions(activeSchema), [activeSchema]);
+  const [draft, setDraft] = useState({ name: "", slug: "", description: "" });
+  const [editDraft, setEditDraft] = useState({
+    description: "",
+    isActive: true,
+    name: "",
+    slug: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditDraft({
+      description: activeCourse?.description ?? "",
+      isActive: activeCourse?.isActive ?? true,
+      name: activeCourse?.name ?? "",
+      slug: activeCourse?.slug ?? "",
+    });
+  }, [activeCourse]);
+
+  async function handleCreateCourse(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!draft.name.trim()) {
+      setError("\u0623\u062F\u062E\u0644 \u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629.");
+      return;
+    }
+
+    try {
+      const course = await createCourse({
+        description: draft.description,
+        name: draft.name,
+        slug: draft.slug || draft.name,
+      });
+      setDraft({ name: "", slug: "", description: "" });
+      await onCoursesChanged();
+      if (course) {
+        onSelect(course);
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  async function handleUpdateActiveCourse(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!activeCourse) {
+      setError("\u0627\u062E\u062A\u0631 \u062F\u0648\u0631\u0629 \u0644\u062A\u0639\u062F\u064A\u0644\u0647\u0627.");
+      return;
+    }
+
+    if (!editDraft.name.trim()) {
+      setError("\u0623\u062F\u062E\u0644 \u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629.");
+      return;
+    }
+
+    try {
+      const updatedCourse = await updateCourse(activeCourse.id, {
+        description: editDraft.description,
+        isActive: editDraft.isActive,
+        name: editDraft.name,
+        slug: editDraft.slug || editDraft.name,
+      });
+      await onCoursesChanged();
+      if (updatedCourse) {
+        onSelect(updatedCourse);
+      }
+      setSuccess("\u062A\u0645 \u062D\u0641\u0638 \u062A\u0639\u062F\u064A\u0644\u0627\u062A \u0627\u0644\u062F\u0648\u0631\u0629.");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  async function handleToggleCourse(course: Course) {
+    try {
+      setError(null);
+      setSuccess(null);
+      await updateCourse(course.id, { isActive: !course.isActive });
+      await onCoursesChanged();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
   return (
     <section className="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-xl shadow-cedar/5 backdrop-blur sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1068,29 +1728,338 @@ export function SchemaSettingsPage({
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,0.55fr)_minmax(0,0.45fr)]">
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-          <SchemaPicker
-            activeSchema={activeSchema}
-            onSelect={onSelect}
-            schemas={schemas}
-          />
+          <label className="flex w-full flex-col gap-2 text-sm font-bold text-slate-700">
+            <span>{"\u0627\u0644\u062F\u0648\u0631\u0629"}</span>
+            <select
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
+              onChange={(event) => {
+                const course = courses.find(
+                  (currentCourse) => currentCourse.slug === event.target.value,
+                );
+                if (course) {
+                  onSelect(course);
+                }
+              }}
+              value={activeCourse?.slug ?? ""}
+            >
+              {!activeCourse ? (
+                <option value="" disabled>
+                  {"\u0627\u062E\u062A\u0631 \u062F\u0648\u0631\u0629"}
+                </option>
+              ) : null}
+              {courses.map((course) => (
+                <option key={course.id} value={course.slug}>
+                  {course.name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-xs font-bold text-slate-500">{ui.activeSchema}</p>
-          <p className="mt-2 break-all text-2xl font-bold text-ink">
-            {activeSchema}
+          <p className="text-xs font-bold text-slate-500">{"\u0627\u0644\u062F\u0648\u0631\u0629 \u0627\u0644\u0646\u0634\u0637\u0629"}</p>
+          <p className="arabic-readable mt-2 break-all text-2xl font-bold text-ink">
+            {activeCourse?.name ?? "\u0644\u0627 \u062A\u0648\u062C\u062F \u062F\u0648\u0631\u0629 \u0645\u062D\u062F\u062F\u0629"}
           </p>
+          {activeCourse ? (
+            <p className="mt-1 break-all text-xs font-semibold text-slate-500">
+              /{activeCourse.slug}
+            </p>
+          ) : null}
         </div>
       </div>
 
-      <PageTierSettings activeSchema={activeSchema} entityDefinitions={entityDefinitions} />
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-ink">{"\u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u062F\u0648\u0631\u0627\u062A"}</p>
+            <p className="mt-1 text-xs text-slate-500">{"\u0643\u0644 \u062F\u0648\u0631\u0629 \u062A\u0639\u0631\u0636 \u0628\u064A\u0627\u0646\u0627\u062A\u0647\u0627 \u0641\u0642\u0637."}</p>
+          </div>
+          <Layers3 className="h-5 w-5 text-cedar" aria-hidden="true" />
+        </div>
+        {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
+        {success ? <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p> : null}
+        <div className="mt-4 grid gap-2">
+          {courses.map((course) => (
+            <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between" key={course.id}>
+              <div className="min-w-0">
+                <p className="arabic-readable truncate text-sm font-bold text-ink">{course.name}</p>
+                <p className="mt-1 break-all text-xs text-slate-500">{course.slug}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => onSelect(course)}
+                  type="button"
+                >
+                  {ui.view}
+                </button>
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => void handleToggleCourse(course)}
+                  type="button"
+                >
+                  {course.isActive ? "\u062A\u0639\u0637\u064A\u0644" : "\u062A\u0641\u0639\u064A\u0644"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <form className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto] md:items-end" onSubmit={handleCreateCourse}>
+          <input className="arabic-readable min-h-12 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder={"\u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629"} value={draft.name} />
+          <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))} placeholder="course-slug" value={draft.slug} />
+          <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} placeholder={"\u0648\u0635\u0641 \u0627\u062E\u062A\u064A\u0627\u0631\u064A"} value={draft.description} />
+          <button className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-cedar px-4 text-sm font-bold text-white md:w-auto" type="submit">{ui.create}</button>
+        </form>
+      </div>
+
+      <form className="mt-5 rounded-2xl border border-slate-200 bg-white p-4" onSubmit={handleUpdateActiveCourse}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-ink">{"\u062A\u0639\u062F\u064A\u0644 \u0627\u0644\u062F\u0648\u0631\u0629"}</p>
+            <p className="mt-1 text-xs text-slate-500">{"\u063A\u064A\u0631 \u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629 \u0648\u0627\u0644\u0631\u0627\u0628\u0637 \u0648\u0627\u0644\u0648\u0635\u0641."}</p>
+          </div>
+          <Pencil className="h-5 w-5 text-cedar" aria-hidden="true" />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="grid gap-2 text-sm font-bold text-slate-700">
+            <span>{"\u0627\u0633\u0645 \u0627\u0644\u062F\u0648\u0631\u0629"}</span>
+            <input
+              className="arabic-readable min-h-12 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              disabled={!activeCourse}
+              onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))}
+              value={editDraft.name}
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-bold text-slate-700">
+            <span>{"\u0631\u0627\u0628\u0637 \u0627\u0644\u062F\u0648\u0631\u0629"}</span>
+            <input
+              className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              disabled={!activeCourse}
+              dir="ltr"
+              onChange={(event) => setEditDraft((current) => ({ ...current, slug: event.target.value }))}
+              value={editDraft.slug}
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-bold text-slate-700 md:col-span-2">
+            <span>{"\u0627\u0644\u0648\u0635\u0641"}</span>
+            <textarea
+              className="min-h-24 min-w-0 resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              disabled={!activeCourse}
+              onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))}
+              value={editDraft.description}
+            />
+          </label>
+          <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
+            <input
+              checked={editDraft.isActive}
+              className="h-4 w-4 accent-cedar"
+              disabled={!activeCourse}
+              onChange={(event) => setEditDraft((current) => ({ ...current, isActive: event.target.checked }))}
+              type="checkbox"
+            />
+            <span>{"\u062F\u0648\u0631\u0629 \u0646\u0634\u0637\u0629"}</span>
+          </label>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cedar px-4 text-sm font-bold text-white transition hover:bg-palm disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!activeCourse}
+            type="submit"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
+            <span>{ui.save}</span>
+          </button>
+        </div>
+      </form>
+
+      {showAdminSections ? <AdminUsersSettings /> : null}
+
+      {showAdminSections && activeCourse ? (
+        <PageTierSettings activeCourse={activeCourse} activeSchema={activeSchema} entityDefinitions={entityDefinitions} />
+      ) : null}
     </section>
   );
 }
 
+function AdminUsersSettings() {
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [draft, setDraft] = useState({ userId: "", email: "", owner: false });
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  async function refreshAdmins() {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      setAdmins(await listAdminUsers());
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.loadError);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshAdmins();
+  }, []);
+
+  async function handleCreateAdmin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    if (!draft.userId.trim()) {
+      setError("أدخل معرف المستخدم.");
+      return;
+    }
+
+    try {
+      await createAdminUser({
+        email: draft.email,
+        owner: draft.owner,
+        userId: draft.userId,
+      });
+      setDraft({ userId: "", email: "", owner: false });
+      await refreshAdmins();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  async function handleEmailChange(admin: AdminUser, email: string) {
+    try {
+      await updateAdminUser(admin.userId, { email });
+      await refreshAdmins();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  async function handleOwnerChange(admin: AdminUser, owner: boolean) {
+    try {
+      await updateAdminUser(admin.userId, { owner });
+      await refreshAdmins();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  async function handleDeleteAdmin(admin: AdminUser) {
+    try {
+      await deleteAdminUser(admin.userId);
+      await refreshAdmins();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink">إدارة المستخدمين والصلاحيات</p>
+          <p className="mt-1 text-xs leading-6 text-slate-500">
+            المستخدم المالك يستطيع إدارة المستخدمين والصلاحيات وله وصول كامل لكل البيانات.
+          </p>
+        </div>
+        <ShieldCheck className="h-5 w-5 text-cedar" aria-hidden="true" />
+      </div>
+
+      {error ? (
+        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {error}
+        </p>
+      ) : null}
+
+      {isLoading ? (
+        <p className="mt-4 text-sm text-slate-500">{ui.loading}</p>
+      ) : (
+        <div className="mt-4 grid gap-2">
+          {admins.map((admin) => (
+            <div
+              className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] lg:items-center"
+              key={admin.userId}
+            >
+              <div className="min-w-0">
+                <p className="break-all text-sm font-bold text-ink">
+                  {admin.userId}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : ui.none}
+                </p>
+              </div>
+              <input
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                defaultValue={admin.email ?? ""}
+                onBlur={(event) => void handleEmailChange(admin, event.target.value)}
+                placeholder="email@example.com"
+              />
+              <label className="inline-flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700">
+                <span>مالك</span>
+                <input
+                  checked={admin.owner}
+                  className="h-4 w-4 accent-cedar"
+                  onChange={(event) => void handleOwnerChange(admin, event.target.checked)}
+                  type="checkbox"
+                />
+              </label>
+              <ActionButton
+                compact
+                danger
+                icon={Trash2}
+                label={ui.delete}
+                onClick={() => void handleDeleteAdmin(admin)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form
+        className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_auto] lg:items-center"
+        onSubmit={handleCreateAdmin}
+      >
+        <input
+          className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, userId: event.target.value }))
+          }
+          placeholder="Neon Auth user ID"
+          value={draft.userId}
+        />
+        <input
+          className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, email: event.target.value }))
+          }
+          placeholder="email@example.com"
+          value={draft.email}
+        />
+        <label className="inline-flex h-11 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+          <span>مالك</span>
+          <input
+            checked={draft.owner}
+            className="h-4 w-4 accent-cedar"
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, owner: event.target.checked }))
+            }
+            type="checkbox"
+          />
+        </label>
+        <button className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-cedar px-4 text-sm font-bold text-white lg:w-auto" type="submit">
+          {ui.create}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function PageTierSettings({
+  activeCourse,
   activeSchema,
   entityDefinitions,
 }: {
+  activeCourse: Course;
   activeSchema: SchemaName;
   entityDefinitions: EntityDefinition[];
 }) {
@@ -1103,14 +2072,14 @@ function PageTierSettings({
     if (!tierEntity) {
       return;
     }
-    setTiers(await listRows(tierEntity));
+    setTiers(await listRows(tierEntity, activeCourse));
   }
 
   useEffect(() => {
     void refreshTiers().catch((caughtError) =>
       setError(caughtError instanceof Error ? caughtError.message : ui.loadError),
     );
-  }, [tierEntity]);
+  }, [activeCourse, tierEntity]);
 
   async function handleAddTier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1129,7 +2098,7 @@ function PageTierSettings({
       maxPages,
       points,
       name: draft.name || `${minPages}${maxPages ? `-${maxPages}` : "+"} pages/day`,
-    });
+    }, activeCourse);
     setDraft({ minPages: "1", maxPages: "", points: "10", name: "" });
     await refreshTiers();
   }
@@ -1138,7 +2107,7 @@ function PageTierSettings({
     if (!tierEntity) {
       return;
     }
-    await updateRow(tierEntity, Number(row.id), { [key]: value });
+    await updateRow(tierEntity, Number(row.id), { [key]: value }, activeCourse);
     await refreshTiers();
   }
 
@@ -1146,7 +2115,7 @@ function PageTierSettings({
     if (!tierEntity) {
       return;
     }
-    await softDeleteRow(tierEntity, Number(row.id));
+    await softDeleteRow(tierEntity, Number(row.id), activeCourse);
     await refreshTiers();
   }
 
@@ -1171,12 +2140,12 @@ function PageTierSettings({
           </div>
         ))}
       </div>
-      <form className="mt-4 grid gap-2 md:grid-cols-5" onSubmit={handleAddTier}>
-        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="اسم الشريحة" value={draft.name} />
-        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, minPages: event.target.value }))} type="number" value={draft.minPages} />
-        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="بلا حد" type="number" value={draft.maxPages} />
-        <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, points: event.target.value }))} type="number" value={draft.points} />
-        <button className="rounded-xl bg-cedar px-3 py-2 text-sm font-bold text-white" type="submit">إضافة شريحة</button>
+      <form className="mt-4 grid gap-3 md:grid-cols-[repeat(4,minmax(0,1fr))_auto] md:items-end" onSubmit={handleAddTier}>
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="اسم الشريحة" value={draft.name} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, minPages: event.target.value }))} type="number" value={draft.minPages} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="بلا حد" type="number" value={draft.maxPages} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, points: event.target.value }))} type="number" value={draft.points} />
+        <button className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl bg-cedar px-3 text-sm font-bold text-white md:w-auto" type="submit">إضافة شريحة</button>
       </form>
     </div>
   );
@@ -1184,68 +2153,24 @@ function PageTierSettings({
 
 function PointsWorkspace({
   activeSchema,
-  entityDefinitions,
   relationOptions,
-  onRefresh,
+  onOpenManualPoints,
   onNavigateStudent,
 }: {
   activeSchema: SchemaName;
-  entityDefinitions: EntityDefinition[];
   relationOptions: RelationOptions;
-  onRefresh: () => Promise<void>;
+  onOpenManualPoints: () => void;
   onNavigateStudent: (student: CrudRow) => void;
 }) {
   const [rankMode, setRankMode] = useState<"points" | "pages" | "recent">("points");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [search, setSearch] = useState("");
-  const [manualStudentId, setManualStudentId] = useState("");
-  const [manualDate, setManualDate] = useState(getTodayDateString());
-  const [manualAmount, setManualAmount] = useState("");
-  const [manualReason, setManualReason] = useState("");
-  const [manualError, setManualError] = useState<string | null>(null);
   const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
   const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
   const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
   const awards = relationOptions[`${activeSchema}.pagePointAwards` as EntityId] ?? [];
   const manual = relationOptions[`${activeSchema}.manualPointTransactions` as EntityId] ?? [];
-  const manualEntity = getEntityByKey(
-    entityDefinitions,
-    activeSchema,
-    "manualPointTransactions",
-  );
-
-  useEffect(() => {
-    if (!manualStudentId && students[0]?.id !== undefined) {
-      setManualStudentId(String(students[0].id));
-    }
-  }, [manualStudentId, students]);
-
-  async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setManualError(null);
-    const amount = Number(manualAmount);
-
-    if (!manualEntity || !manualStudentId || !Number.isInteger(amount) || !manualReason.trim()) {
-      setManualError("اختر الطالب وأدخل مقدار النقاط والسبب.");
-      return;
-    }
-
-    try {
-      await createRow(manualEntity, {
-        studentId: Number(manualStudentId),
-        transactionDate: manualDate,
-        amount,
-        reason: manualReason.trim(),
-      });
-      setManualAmount("");
-      setManualReason("");
-      await onRefresh();
-    } catch (caughtError) {
-      setManualError(caughtError instanceof Error ? caughtError.message : ui.createError);
-    }
-  }
-
   function isInRange(value: CrudValue | undefined) {
     const date = String(value ?? "").slice(0, 10);
     return (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
@@ -1281,30 +2206,27 @@ function PointsWorkspace({
             <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
             <h2 className="mt-1 text-2xl font-bold text-ink">ترتيب الطلاب والحفظ</h2>
           </div>
-          <div className="grid gap-2 sm:grid-cols-4">
-            <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setRankMode(event.target.value as typeof rankMode)} value={rankMode}>
+          <div className="grid gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center">
+            <select className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setRankMode(event.target.value as typeof rankMode)} value={rankMode}>
               <option value="points">حسب مجموع النقاط</option>
               <option value="pages">حسب صفحات الحفظ</option>
               <option value="recent">حسب النشاط ضمن الفترة</option>
             </select>
-            <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
-            <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
-            <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="بحث عن طالب" value={search} />
+            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="بحث عن طالب" value={search} />
+            <button
+              aria-label="إضافة نقاط يدوية"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+              onClick={onOpenManualPoints}
+              title="إضافة نقاط يدوية"
+              type="button"
+            >
+              <Plus className="h-5 w-5" aria-hidden="true" />
+            </button>
           </div>
         </div>
       </div>
-      <form className="grid gap-2 border-b border-slate-200/80 bg-slate-50/70 p-4 md:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.65fr))_auto]" onSubmit={handleManualSubmit}>
-        <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualStudentId(event.target.value)} value={manualStudentId}>
-          {students.map((student) => (
-            <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
-          ))}
-        </select>
-        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualDate(event.target.value)} type="date" value={manualDate} />
-        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualAmount(event.target.value)} placeholder="نقاط + أو -" type="number" value={manualAmount} />
-        <input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setManualReason(event.target.value)} placeholder="السبب" value={manualReason} />
-        <button className="rounded-xl bg-ink px-3 py-2 text-sm font-bold text-white" type="submit">إضافة حركة</button>
-        {manualError ? <p className="text-sm text-amber-800 md:col-span-5">{manualError}</p> : null}
-      </form>
       <div className="overflow-x-auto">
         <table className="w-full divide-y divide-slate-200 text-right text-sm">
           <thead className="bg-mist/70">
@@ -1340,12 +2262,119 @@ function PointsWorkspace({
   );
 }
 
+function ManualPointsPage({
+  activeCourse,
+  activeSchema,
+  entityDefinitions,
+  relationOptions,
+  onBack,
+  onCreated,
+}: {
+  activeCourse: Course;
+  activeSchema: SchemaName;
+  entityDefinitions: EntityDefinition[];
+  relationOptions: RelationOptions;
+  onBack: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const [studentId, setStudentId] = useState("");
+  const [transactionDate, setTransactionDate] = useState(getTodayDateString());
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
+  const manualEntity = getEntityByKey(
+    entityDefinitions,
+    activeSchema,
+    "manualPointTransactions",
+  );
+
+  useEffect(() => {
+    if (!studentId && students[0]?.id !== undefined) {
+      setStudentId(String(students[0].id));
+    }
+  }, [studentId, students]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const parsedAmount = Number(amount);
+
+    if (!manualEntity || !studentId || !Number.isInteger(parsedAmount) || !reason.trim()) {
+      setError("اختر الطالب وأدخل مقدار النقاط والسبب.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await createRow(manualEntity, {
+        studentId: Number(studentId),
+        transactionDate,
+        amount: parsedAmount,
+        reason: reason.trim(),
+      }, activeCourse);
+      setAmount("");
+      setReason("");
+      await onCreated();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-4">
+        <div>
+          <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
+          <h2 className="mt-1 text-2xl font-bold text-ink">إضافة نقاط يدوية</h2>
+        </div>
+        <button
+          aria-label={ui.cancel}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+          onClick={onBack}
+          title={ui.cancel}
+          type="button"
+        >
+          <Undo2 className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <form className="grid gap-3 p-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_auto] md:items-end" onSubmit={handleSubmit}>
+        <select className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setStudentId(event.target.value)} value={studentId}>
+          {students.map((student) => (
+            <option key={String(student.id)} value={String(student.id)}>
+              {getStudentName(student)}
+            </option>
+          ))}
+        </select>
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setTransactionDate(event.target.value)} type="date" value={transactionDate} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setAmount(event.target.value)} placeholder="نقاط + أو -" type="number" value={amount} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="السبب" value={reason} />
+        {error ? <p className="order-last rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-5">{error}</p> : null}
+        <button
+          className="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 md:w-auto"
+          disabled={isSaving}
+          type="submit"
+        >
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+          <span>{isSaving ? ui.saving : "إضافة حركة"}</span>
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function MemorizationWorkspace({
+  activeCourse,
   activeSchema,
   entityDefinitions,
   onCreated,
   relationOptions,
 }: {
+  activeCourse: Course;
   activeSchema: SchemaName;
   entityDefinitions: EntityDefinition[];
   onCreated: () => Promise<void>;
@@ -1407,6 +2436,7 @@ function MemorizationWorkspace({
           page,
           memorizedOn,
         })),
+        activeCourse,
       );
       try {
         await createRows(
@@ -1418,13 +2448,14 @@ function MemorizationWorkspace({
             snapshot,
             points: pointSplit[index] ?? 0,
           })),
+          activeCourse,
         );
       } catch (awardError) {
         await Promise.all(
           createdPages
             .map((page) => Number(page.id))
             .filter((id) => Number.isFinite(id))
-            .map((id) => softDeleteRow(pagesEntity, id)),
+            .map((id) => softDeleteRow(pagesEntity, id, activeCourse)),
         );
         throw awardError;
       }
@@ -2005,16 +3036,20 @@ function AttendanceWorkspace({
 
 export function CrudDashboard({
   activeEntityKey,
+  activeCourse,
   activeSchema,
   attendanceTaking = false,
+  manualPoints = false,
   mode,
   rowId,
   routeSearch,
   topAccessory,
 }: {
   activeEntityKey: EntityKey;
+  activeCourse: Course;
   activeSchema: SchemaName;
   attendanceTaking?: boolean;
+  manualPoints?: boolean;
   mode: ViewMode;
   rowId?: string;
   routeSearch: RouteSearch;
@@ -2088,7 +3123,7 @@ export function CrudDashboard({
     setError(null);
 
     try {
-      setRows(await listRows(entity));
+      setRows(await listRows(entity, activeCourse));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : ui.loadError);
     } finally {
@@ -2100,7 +3135,7 @@ export function CrudDashboard({
     const entries = await Promise.all(
       relationEntityIds.map(async (entityId) => {
         const entity = findEntityDefinition(entityId, entityDefinitions);
-        return entity ? ([entityId, await listRows(entity)] as const) : null;
+        return entity ? ([entityId, await listRows(entity, activeCourse)] as const) : null;
       }),
     );
 
@@ -2116,7 +3151,7 @@ export function CrudDashboard({
   useEffect(() => {
     setSelectedRow(null);
     void refreshRows(activeEntity);
-  }, [activeEntity]);
+  }, [activeCourse, activeEntity]);
 
   useEffect(() => {
     if (!rowId || (mode !== "detail" && mode !== "edit")) {
@@ -2147,7 +3182,7 @@ export function CrudDashboard({
     return () => {
       isMounted = false;
     };
-  }, [entityDefinitions, relationEntityIds]);
+  }, [activeCourse, entityDefinitions, relationEntityIds]);
 
   async function handleSoftDelete(row: CrudRow) {
     const label = getRowLabel(activeEntity, row);
@@ -2164,11 +3199,11 @@ export function CrudDashboard({
       return;
     }
 
-    await softDeleteRow(activeEntity, id);
+    await softDeleteRow(activeEntity, id, activeCourse);
     await refreshRows();
     void navigate({
       to: dashboardPath({
-        schema: activeSchema,
+        courseSlug: activeCourse.slug,
         entity: getEntityKey(activeEntity.id),
       }),
       search: cleanSearch({ q: searchTerm }),
@@ -2205,11 +3240,11 @@ export function CrudDashboard({
   }, [activeEntity, entityDefinitions, relationOptions, rows, searchTerm]);
 
   async function handleCreate(values: Record<string, CrudValue>) {
-    await createRow(activeEntity, values);
+    await createRow(activeEntity, values, activeCourse);
     await refreshRows();
     void navigate({
       to: dashboardPath({
-        schema: activeSchema,
+        courseSlug: activeCourse.slug,
         entity: getEntityKey(activeEntity.id),
       }),
       search: cleanSearch({ q: searchTerm }),
@@ -2221,11 +3256,11 @@ export function CrudDashboard({
       return;
     }
 
-    await updateRow(activeEntity, Number(selectedRow.id), values);
+    await updateRow(activeEntity, Number(selectedRow.id), values, activeCourse);
     await refreshRows();
     void navigate({
       to: dashboardPath({
-        schema: activeSchema,
+        courseSlug: activeCourse.slug,
         entity: getEntityKey(activeEntity.id),
         mode: "detail",
         rowId: selectedRow.id,
@@ -2241,13 +3276,13 @@ export function CrudDashboard({
     existingRecord?: CrudRow,
   ) {
     if (existingRecord?.id !== undefined && existingRecord.id !== null) {
-      await updateRow(activeEntity, Number(existingRecord.id), { status });
+      await updateRow(activeEntity, Number(existingRecord.id), { status }, activeCourse);
     } else {
       await createRow(activeEntity, {
         studentId,
         attendanceSessionId: sessionId,
         status,
-      });
+      }, activeCourse);
     }
 
     await refreshRows();
@@ -2264,14 +3299,14 @@ export function CrudDashboard({
       return;
     }
 
-    const [schema, entity] = field.relation.entityId.split(".") as [
+    const [, entity] = field.relation.entityId.split(".") as [
       SchemaName,
       EntityKey,
     ];
 
     void navigate({
       to: dashboardPath({
-        schema,
+        courseSlug: activeCourse.slug,
         entity,
         mode: "detail",
         rowId: relatedRow.id,
@@ -2288,7 +3323,7 @@ export function CrudDashboard({
   }) {
     void navigate({
       to: dashboardPath({
-        schema: activeSchema,
+        courseSlug: activeCourse.slug,
         entity: next.entity ?? getEntityKey(activeEntity.id),
         mode: next.mode,
         rowId: next.rowId,
@@ -2325,7 +3360,7 @@ export function CrudDashboard({
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
           <div className="min-w-0 text-right">
-            <p className="text-sm font-bold text-cedar">{ui.adminCrud}</p>
+            <p className="text-sm font-bold text-cedar">{activeCourse.name}</p>
             <h1 className="mt-0.5 truncate text-2xl font-bold text-ink sm:text-3xl">
               {activeEntity.label}
             </h1>
@@ -2358,7 +3393,7 @@ export function CrudDashboard({
         onSelectAttendanceTaking={() => {
           void navigate({
             to: dashboardPath({
-              schema: activeSchema,
+              courseSlug: activeCourse.slug,
               entity: "attendanceRecords",
               subpage: "take",
             }),
@@ -2375,11 +3410,41 @@ export function CrudDashboard({
           </p>
         ) : null}
 
-        {activeEntityKey === "points" ? (
-          <PointsWorkspace
+        {activeEntityKey === "points" && manualPoints ? (
+          <ManualPointsPage
+            activeCourse={activeCourse}
             activeSchema={activeSchema}
             entityDefinitions={entityDefinitions}
-            onRefresh={refreshRelationOptions}
+            onBack={() =>
+              void navigate({
+                to: dashboardPath({
+                  courseSlug: activeCourse.slug,
+                  entity: "points",
+                }),
+                search: {},
+              })
+            }
+            onCreated={async () => {
+              await refreshRows();
+              await refreshRelationOptions();
+            }}
+            relationOptions={relationOptions}
+          />
+        ) : null}
+
+        {activeEntityKey === "points" && !manualPoints ? (
+          <PointsWorkspace
+            activeSchema={activeSchema}
+            onOpenManualPoints={() =>
+              void navigate({
+                to: dashboardPath({
+                  courseSlug: activeCourse.slug,
+                  entity: "points",
+                  subpage: "manual",
+                }),
+                search: {},
+              })
+            }
             onNavigateStudent={(student) =>
               navigateDashboard({
                 entity: "students",
@@ -2394,6 +3459,7 @@ export function CrudDashboard({
 
         {activeEntityKey === "pages" ? (
           <MemorizationWorkspace
+            activeCourse={activeCourse}
             activeSchema={activeSchema}
             entityDefinitions={entityDefinitions}
             onCreated={async () => {
@@ -2486,7 +3552,7 @@ export function CrudDashboard({
             onOpenTakingPage={() =>
               void navigate({
                 to: dashboardPath({
-                  schema: activeSchema,
+                  courseSlug: activeCourse.slug,
                   entity: "attendanceRecords",
                   subpage: "take",
                 }),
@@ -2739,3 +3805,4 @@ function ActionButton({
     </button>
   );
 }
+

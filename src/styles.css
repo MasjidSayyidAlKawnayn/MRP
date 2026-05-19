@@ -16,7 +16,11 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at top right, rgba(20, 104, 93, 0.13), transparent 32rem),
+    radial-gradient(
+      circle at top right,
+      rgba(20, 104, 93, 0.13),
+      transparent 32rem
+    ),
     linear-gradient(135deg, rgba(200, 138, 26, 0.08), transparent 24rem),
     #f7f1e6;
 }
@@ -43,6 +47,14 @@ textarea {
   outline: none;
 }
 
+.arabic-readable {
+  line-height: 1.9;
+  padding-bottom: 0.125rem;
+  position: relative;
+  text-rendering: optimizeLegibility;
+  z-index: 10;
+}
+
 input:focus,
 select:focus,
 textarea:focus,
@@ -63,7 +75,11 @@ a:focus-visible {
     linear-gradient(-45deg, rgba(20, 104, 93, 0.07) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, rgba(200, 138, 26, 0.08) 75%),
     linear-gradient(-45deg, transparent 75%, rgba(200, 138, 26, 0.08) 75%);
-  background-position: 0 0, 0 14px, 14px -14px, -14px 0;
+  background-position:
+    0 0,
+    0 14px,
+    14px -14px,
+    -14px 0;
   background-size: 28px 28px;
   content: "";
   inset: 0;
@@ -73,15 +89,108 @@ a:focus-visible {
 }
 
 .neon-auth-ui {
+  --background: transparent;
+  --card: transparent;
+  --card-foreground: #17211f;
+  --foreground: #17211f;
+  --primary: #14685d;
+  --primary-foreground: #ffffff;
+  --secondary: #f3eee4;
+  --secondary-foreground: #17211f;
+  --muted: #f7f1e6;
+  --muted-foreground: #647067;
+  --accent: rgba(20, 104, 93, 0.08);
+  --accent-foreground: #0f4f46;
+  --border: #e8dfd2;
+  --input: #e7ded2;
+  --ring: #14685d;
   direction: rtl;
 }
 
+.neon-auth-ui .login-auth-shell {
+  width: 100%;
+}
+
+.neon-auth-ui .login-auth-shell [data-slot="card"] {
+  gap: 1.25rem;
+}
+
+.neon-auth-ui .login-auth-shell form > [data-slot="form-item"] {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.neon-auth-ui
+  .login-auth-shell
+  form
+  > [data-slot="form-item"]
+  > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.neon-auth-ui .login-auth-shell form > [data-slot="form-item"].flex {
+  display: flex;
+  align-items: center;
+  flex-flow: row nowrap;
+  min-height: 1.75rem;
+  width: 100%;
+}
+
+.neon-auth-ui .login-auth-shell form > [data-slot="form-item"].flex > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.neon-auth-ui .login-auth-shell [data-slot="form-label"] {
+  color: #17211f;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.neon-auth-ui .login-auth-shell input {
+  direction: ltr;
+}
+
+.neon-auth-ui .login-auth-shell input::placeholder {
+  color: #9a9388;
+}
+
+.neon-auth-ui .login-auth-shell button[type="submit"] {
+  letter-spacing: 0;
+}
+
+.neon-auth-ui .login-auth-shell [role="checkbox"] {
+  border-color: #d8d0c4;
+  border-radius: 0.375rem;
+  height: 1.05rem;
+  width: 1.05rem;
+}
+
+.neon-auth-ui .login-auth-shell [role="checkbox"][data-state="checked"] {
+  background-color: #14685d;
+  border-color: #14685d;
+}
+
+.neon-auth-ui .login-auth-shell [data-slot="card-footer"] {
+  gap: 0.35rem;
+}
+
 .group-color-row {
-  background-color: color-mix(in srgb, var(--group-color-light) 14%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--group-color-light) 14%,
+    transparent
+  );
 }
 
 .group-color-row:hover {
-  background-color: color-mix(in srgb, var(--group-color-light) 24%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--group-color-light) 24%,
+    transparent
+  );
 }
 
 .group-color-chip {
@@ -96,11 +205,19 @@ a:focus-visible {
 
 @media (prefers-color-scheme: dark) {
   .group-color-row {
-    background-color: color-mix(in srgb, var(--group-color-dark) 16%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--group-color-dark) 16%,
+      transparent
+    );
   }
 
   .group-color-row:hover {
-    background-color: color-mix(in srgb, var(--group-color-dark) 28%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--group-color-dark) 28%,
+      transparent
+    );
   }
 
   .group-color-chip {

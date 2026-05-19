@@ -4,7 +4,6 @@ import { BetterAuthReactAdapter } from "@neondatabase/neon-js/auth/react/adapter
 
 const authUrl = import.meta.env.VITE_NEON_AUTH_URL;
 const dataApiUrl = import.meta.env.VITE_NEON_DATA_API_URL;
-const adminUiEmailValue = import.meta.env.VITE_ADMIN_EMAILS;
 
 const isValidAuthUrl = Boolean(
   authUrl &&
@@ -19,12 +18,6 @@ const isValidDataApiUrl = Boolean(
   new URL(dataApiUrl).protocol.startsWith("http"),
 );
 
-export const adminUiEmails =
-  adminUiEmailValue
-    ?.split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean) ?? [];
-
 if (!isValidAuthUrl) {
   console.warn(
     "Missing or invalid VITE_NEON_AUTH_URL. Copy .env.example to .env.local and use your Neon Auth URL from the Neon Console.",
@@ -37,16 +30,9 @@ if (!isValidDataApiUrl) {
   );
 }
 
-if (adminUiEmails.length === 0) {
-  console.warn(
-    "Missing VITE_ADMIN_EMAILS. The frontend will hide the CRUD workspace until a UI allowlist is configured.",
-  );
-}
-
 export const configStatus = {
   hasAuthConfig: isValidAuthUrl,
   hasDataApiConfig: isValidDataApiUrl,
-  hasAdminUiEmails: adminUiEmails.length > 0,
 };
 
 export const hasAuthConfig = configStatus.hasAuthConfig;

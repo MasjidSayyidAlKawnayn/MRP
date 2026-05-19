@@ -7,13 +7,25 @@ import {
   type SchemaName,
 } from "./crud/entities";
 
-export type WorkspacePage = "dashboard" | "profile" | "settings";
+export type WorkspacePage =
+  | "courseCreate"
+  | "courseDelete"
+  | "courseDetail"
+  | "courseEdit"
+  | "courses"
+  | "dashboard"
+  | "profile"
+  | "settings";
 export type ViewMode = "list" | "create" | "detail" | "edit";
+export type CourseMode = "list" | "create" | "detail" | "edit" | "delete";
 export type RouteSearch = {
   draft?: string;
   q?: string;
 };
 export type DraftValues = Record<string, CrudValue>;
+export type WorkspaceContext = {
+  courseSlug: string;
+};
 
 export function getDefaultSchema(schemas: SchemaName[]) {
   return schemas[0] ?? "mqs";
@@ -39,19 +51,23 @@ export function validateEntityKey(schema: SchemaName, entity: string | undefined
 }
 
 export function dashboardPath({
-  schema,
+  courseSlug,
   entity,
   mode = "list",
   rowId,
   subpage,
 }: {
-  schema: SchemaName;
+  courseSlug: string;
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
-  subpage?: "take";
+  subpage?: "manual" | "take";
 }) {
-  const basePath = `/dashboard/${schema}/${entity}`;
+  const basePath = `/courses/${courseSlug}/dashboard/${entity}`;
+
+  if (subpage === "manual") {
+    return `${basePath}/manual`;
+  }
 
   if (subpage === "take") {
     return `${basePath}/take`;
@@ -66,6 +82,54 @@ export function dashboardPath({
   }
 
   return basePath;
+}
+
+export function coursePath({
+  courseSlug,
+  mode = "list",
+}: {
+  courseSlug?: string;
+  mode?: CourseMode;
+}) {
+  if (mode === "create") {
+    return "/courses/new";
+  }
+
+  if (!courseSlug || mode === "list") {
+    return "/courses";
+  }
+
+  if (mode === "edit") {
+    return `/courses/${courseSlug}/edit`;
+  }
+
+  if (mode === "delete") {
+    return `/courses/${courseSlug}/delete`;
+  }
+
+  return `/courses/${courseSlug}`;
+}
+
+export function legacyDashboardPath({
+  schema,
+  entity,
+  mode,
+  rowId,
+  subpage,
+}: {
+  schema: SchemaName;
+  entity: EntityKey;
+  mode?: ViewMode;
+  rowId?: CrudValue;
+  subpage?: "manual" | "take";
+}) {
+  return dashboardPath({
+    courseSlug: schema === "mqs" ? "default" : schema,
+    entity,
+    mode,
+    rowId,
+    subpage,
+  });
 }
 
 export function encodeDraft(values: DraftValues) {

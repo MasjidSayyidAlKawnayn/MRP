@@ -9,11 +9,10 @@ Local development needs `.env.local` with:
 ```env
 VITE_NEON_AUTH_URL=https://ep-your-branch-id.neonauth.us-east-1.aws.neon.tech/neondb/auth
 VITE_NEON_DATA_API_URL=https://ep-your-branch-id.apirest.us-east-1.aws.neon.tech/neondb/rest/v1
-VITE_NEON_SCHEMAS=mqs,wartaqi
-VITE_ADMIN_EMAILS=admin@example.com
+VITE_NEON_APP_SCHEMA=mqs
 ```
 
-Production deployment through GitHub Pages needs repository variables named `VITE_NEON_AUTH_URL` and `VITE_NEON_DATA_API_URL`. `VITE_ADMIN_EMAILS` is optional public UI configuration, not a security boundary.
+Production deployment through GitHub Pages needs repository variables named `VITE_NEON_AUTH_URL` and `VITE_NEON_DATA_API_URL`.
 
 ## Database Authorization
 
@@ -22,32 +21,34 @@ This app is static, so every `VITE_*` value is visible to anyone who loads the s
 Run [sql/secure_admin_rls.sql](sql/secure_admin_rls.sql) as a database owner before exposing the deployed CRUD UI. The migration:
 
 - creates `public.app_admins`
-- enables and forces RLS on MQS and Wartaqi tables
+- adds an `owner` permission flag to `public.app_admins`
+- enables and forces RLS on app-schema tables
 - grants Data API access only to the `authenticated` role
-- creates policies that allow CRUD only when `public.is_app_admin()` matches the signed-in Neon Auth user ID
+- creates policies that allow app CRUD only when `public.is_app_admin()` matches the signed-in Neon Auth user ID
+- creates policies that allow only owners to manage users and permissions in `public.app_admins`
 
-After the migration, insert each admin's Neon Auth user ID:
+After the migration, insert the first owner's Neon Auth user ID:
 
 ```sql
-insert into public.app_admins (user_id, email)
-values ('replace-with-neon-auth-user-id', 'admin@example.com')
-on conflict (user_id) do update set email = excluded.email;
+insert into public.app_admins (user_id, email, owner)
+values ('replace-with-neon-auth-user-id', 'owner@example.com', true)
+on conflict (user_id) do update set email = excluded.email, owner = true;
 ```
 
 ## Auth Flow
 
 - [src/auth/client.ts](src/auth/client.ts) validates the Neon Auth URL, Data API URL, and admin allowlist before the app renders.
 - [src/App.tsx](src/App.tsx) wraps the app with `NeonAuthUIProvider` and `AuthProvider`.
-- [src/auth/AuthContext.tsx](src/auth/AuthContext.tsx) centralizes session reads, sign-out, normalized display fields, and the derived `hasAdminUiAccess` flag.
-- [src/components/AuthPanel.tsx](src/components/AuthPanel.tsx) shows the sign-in/sign-up UI to signed-out users and the admin workspace to UI-allowlisted signed-in users.
-- [src/components/CrudDashboard.tsx](src/components/CrudDashboard.tsx) reads and writes CRUD rows through Neon Data API using the selected schema.
+- [src/auth/AuthContext.tsx](src/auth/AuthContext.tsx) centralizes session reads, sign-out, normalized display fields, and the signed-in workspace flag.
+- [src/components/AuthPanel.tsx](src/components/AuthPanel.tsx) shows the sign-in/sign-up UI to signed-out users and the admin workspace to signed-in users. Database RLS decides which requests succeed.
+- [src/components/CrudDashboard.tsx](src/components/CrudDashboard.tsx) reads and writes CRUD rows through Neon Data API using the active course.
 
 ## Security Notes
 
-- `VITE_ADMIN_EMAILS` only hides or shows the frontend admin workspace. It is public and must not be treated as authorization.
+- Admin rows in `public.app_admins` can access app data. Rows with `owner = true` can also manage users and permissions.
 - Database Row-Level Security is the required access-control boundary for every Data API request.
 - Do not commit `.env.local`, direct Postgres connection strings, CSV exports, or generated SQL seeds that contain student data.
-- Do not expose `public`, `auth`, `neon_auth`, or other system schemas through `VITE_NEON_SCHEMAS`; the app filters to `mqs` and `wartaqi`.
+- Do not expose `public`, `auth`, `neon_auth`, or other system schemas through frontend configuration. `VITE_NEON_APP_SCHEMA` should normally stay `mqs`.
 - Do not store passwords or raw login form input in React context.
 - Keep token-sensitive usage centralized in the auth layer if future API helpers need direct token access.
 

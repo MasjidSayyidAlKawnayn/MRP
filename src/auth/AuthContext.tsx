@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { adminUiEmails, authClient } from "./client";
+import { authClient } from "./client";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not sign out.";
@@ -77,15 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const user = data?.user;
     const session = data?.session;
     const email = getStringField(user, "email");
-    const normalizedEmail = email?.toLowerCase();
 
     return {
       user,
       session,
       isAuthenticated: Boolean(user),
-      hasAdminUiAccess: Boolean(
-        normalizedEmail && adminUiEmails.includes(normalizedEmail),
-      ),
+      hasAdminUiAccess: Boolean(user),
       isLoading: isPending,
       isSigningOut,
       error,

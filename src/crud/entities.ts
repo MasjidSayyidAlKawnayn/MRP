@@ -44,6 +44,7 @@ export interface EntityDefinition {
   label: string;
   singularLabel: string;
   description: string;
+  courseScoped?: boolean;
   showInNav?: boolean;
   fields: FieldDefinition[];
   listFields: string[];
@@ -574,6 +575,15 @@ const entityKeys: EntityKey[] = [
   "attendanceRecords",
 ];
 
+const courseIdField: FieldDefinition = {
+  key: "courseId",
+  column: "course_id",
+  label: "Course",
+  type: "number",
+  readOnly: true,
+  required: true,
+};
+
 const arabicEntities: Record<
   EntityKey,
   Pick<EntityDefinition, "description" | "label" | "singularLabel">
@@ -723,6 +733,7 @@ export function getEntityDefinitions(schema: SchemaName): EntityDefinition[] {
     ...arabicEntities[entityKeys[index]],
     id: `${schema}.${entityKeys[index]}`,
     schema,
+    courseScoped: true,
     fields: entity.fields.map((field) =>
       withSchemaRelationIds(
         {
@@ -734,7 +745,34 @@ export function getEntityDefinitions(schema: SchemaName): EntityDefinition[] {
         },
         schema,
       ),
-    ),
+    ).some((field) => field.key === "courseId")
+      ? entity.fields.map((field) =>
+          withSchemaRelationIds(
+            {
+              ...field,
+              label: arabicFieldLabels[field.key] ?? field.label,
+              helpText: field.helpText
+                ? (arabicHelpText[field.key] ?? field.helpText)
+                : undefined,
+            },
+            schema,
+          ),
+        )
+      : [
+          courseIdField,
+          ...entity.fields.map((field) =>
+            withSchemaRelationIds(
+              {
+                ...field,
+                label: arabicFieldLabels[field.key] ?? field.label,
+                helpText: field.helpText
+                  ? (arabicHelpText[field.key] ?? field.helpText)
+                  : undefined,
+              },
+              schema,
+            ),
+          ),
+        ],
   }));
 }
 

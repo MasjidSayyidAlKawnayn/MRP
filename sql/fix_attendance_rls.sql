@@ -5,8 +5,10 @@ revoke usage on schema mqs from anonymous;
 
 grant select, insert, update, delete on mqs.attendance_sessions to authenticated;
 grant select, insert, update, delete on mqs.attendance_records to authenticated;
+grant select, insert, update, delete on mqs.courses to authenticated;
 revoke all on mqs.attendance_sessions from anonymous;
 revoke all on mqs.attendance_records from anonymous;
+revoke all on mqs.courses from anonymous;
 
 grant usage, select on all sequences in schema mqs to authenticated;
 revoke all on all sequences in schema mqs from anonymous;
@@ -15,6 +17,8 @@ alter table mqs.attendance_sessions enable row level security;
 alter table mqs.attendance_sessions force row level security;
 alter table mqs.attendance_records enable row level security;
 alter table mqs.attendance_records force row level security;
+alter table mqs.courses enable row level security;
+alter table mqs.courses force row level security;
 
 drop policy if exists app_admin_select on mqs.attendance_sessions;
 drop policy if exists app_admin_insert on mqs.attendance_sessions;
@@ -57,6 +61,28 @@ create policy app_admin_update on mqs.attendance_records
   with check (public.is_app_admin());
 
 create policy app_admin_delete on mqs.attendance_records
+  for delete to authenticated
+  using (public.is_app_admin());
+
+drop policy if exists app_admin_select on mqs.courses;
+drop policy if exists app_admin_insert on mqs.courses;
+drop policy if exists app_admin_update on mqs.courses;
+drop policy if exists app_admin_delete on mqs.courses;
+
+create policy app_admin_select on mqs.courses
+  for select to authenticated
+  using (public.is_app_admin());
+
+create policy app_admin_insert on mqs.courses
+  for insert to authenticated
+  with check (public.is_app_admin());
+
+create policy app_admin_update on mqs.courses
+  for update to authenticated
+  using (public.is_app_admin())
+  with check (public.is_app_admin());
+
+create policy app_admin_delete on mqs.courses
   for delete to authenticated
   using (public.is_app_admin());
 

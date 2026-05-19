@@ -5,8 +5,9 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import App from "./App";
-import { getConfiguredSchemas } from "./components/CrudDashboard";
-import { dashboardPath, getDefaultEntityKey, getDefaultSchema } from "./routing";
+import { appSchema } from "./crud/data";
+import type { EntityKey } from "./crud/entities";
+import { dashboardPath, getDefaultEntityKey } from "./routing";
 
 const rootRoute = createRootRoute({
   component: App,
@@ -16,12 +17,10 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
-    const schemas = getConfiguredSchemas();
-    const schema = getDefaultSchema(schemas);
     throw redirect({
       to: dashboardPath({
-        schema,
-        entity: getDefaultEntityKey(schema),
+        courseSlug: "default",
+        entity: getDefaultEntityKey(appSchema),
       }),
       replace: true,
     });
@@ -30,27 +29,46 @@ const indexRoute = createRoute({
 
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard/$schema/$entity",
+  path: "/courses/$courseSlug/dashboard/$entity",
 });
 
 const attendanceTakingRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard/$schema/attendanceRecords/take",
+  path: "/courses/$courseSlug/dashboard/attendanceRecords/take",
+});
+
+const manualPointsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/dashboard/points/manual",
 });
 
 const createRoutePage = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard/$schema/$entity/new",
+  path: "/courses/$courseSlug/dashboard/$entity/new",
 });
 
 const detailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard/$schema/$entity/$rowId",
+  path: "/courses/$courseSlug/dashboard/$entity/$rowId",
 });
 
 const editRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard/$schema/$entity/$rowId/edit",
+  path: "/courses/$courseSlug/dashboard/$entity/$rowId/edit",
+});
+
+const legacyDashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard/$schema/$entity",
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: dashboardPath({
+        courseSlug: params.schema === "mqs" ? "default" : params.schema,
+        entity: params.entity as EntityKey,
+      }),
+      replace: true,
+    });
+  },
 });
 
 const profileRoute = createRoute({
@@ -63,6 +81,31 @@ const settingsRoute = createRoute({
   path: "/settings",
 });
 
+const coursesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses",
+});
+
+const courseCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/new",
+});
+
+const courseDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug",
+});
+
+const courseEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/edit",
+});
+
+const courseDeleteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/delete",
+});
+
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/$",
@@ -72,12 +115,10 @@ const fallbackRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "$",
   beforeLoad: () => {
-    const schemas = getConfiguredSchemas();
-    const schema = getDefaultSchema(schemas);
     throw redirect({
       to: dashboardPath({
-        schema,
-        entity: getDefaultEntityKey(schema),
+        courseSlug: "default",
+        entity: getDefaultEntityKey(appSchema),
       }),
       replace: true,
     });
@@ -90,11 +131,18 @@ export const router = createRouter({
     indexRoute,
     dashboardRoute,
     attendanceTakingRoute,
+    manualPointsRoute,
     createRoutePage,
     detailRoute,
     editRoute,
+    legacyDashboardRoute,
     profileRoute,
     settingsRoute,
+    coursesRoute,
+    courseCreateRoute,
+    courseDetailRoute,
+    courseEditRoute,
+    courseDeleteRoute,
     authRoute,
     fallbackRoute,
   ]),

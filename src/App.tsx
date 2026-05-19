@@ -85,7 +85,7 @@ export default function App() {
               </div>
             </div>
 
-            <ul className="mt-6 grid gap-3 text-sm text-slate-700 sm:mt-8 md:grid-cols-3">
+            <ul className="mt-6 grid gap-3 text-sm text-slate-700 sm:mt-8 md:grid-cols-2">
               <ConfigItem
                 label={"\u0631\u0627\u0628\u0637 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644"}
                 name="VITE_NEON_AUTH_URL"
@@ -95,11 +95,6 @@ export default function App() {
                 label={"\u0631\u0627\u0628\u0637 \u0648\u0627\u062C\u0647\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A"}
                 name="VITE_NEON_DATA_API_URL"
                 ok={configStatus.hasDataApiConfig}
-              />
-              <ConfigItem
-                label={"\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u062F\u064A\u0631\u064A\u0646"}
-                name="VITE_ADMIN_EMAILS"
-                ok={configStatus.hasAdminUiEmails}
               />
             </ul>
           </div>
@@ -124,7 +119,7 @@ export default function App() {
     >
       <AuthProvider>
         <main dir="rtl" className="min-h-screen bg-paper text-ink">
-          <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
+          <div className="w-full px-4 py-4 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
             <AuthPanel appName={appName} />
           </div>
         </main>
