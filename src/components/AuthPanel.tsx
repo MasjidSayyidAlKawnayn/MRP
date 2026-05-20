@@ -32,7 +32,13 @@ import {
   CourseSettingsPage,
   CrudDashboard,
 } from "./CrudDashboard";
-import { appSchema, listCourses, type Course } from "../crud/data";
+import {
+  appSchema,
+  listCohorts,
+  listCourses,
+  type Cohort,
+  type Course,
+} from "../crud/data";
 import type { EntityKey } from "../crud/entities";
 import {
   dashboardPath,
@@ -114,6 +120,7 @@ const authViewLocalization = {
 type WorkspaceRouteState = {
   attendanceTaking?: boolean;
   canonicalPath?: string;
+  cohortTag?: string;
   entity: EntityKey;
   manualPoints?: boolean;
   mode: ViewMode;
@@ -172,8 +179,10 @@ function getWorkspaceRouteState(
   }
 
   const isCourseRoute = page === "courses" && parts[2] === "dashboard";
+  const isCohortRoute =
+    page === "courses" && parts[2] === "cohorts" && parts[4] === "dashboard";
 
-  if (page === "courses" && !isCourseRoute) {
+  if (page === "courses" && !isCourseRoute && !isCohortRoute) {
     const courseSlug = parts[1] ?? defaultCourseSlug;
     const pageMode = parts[2];
 
@@ -191,9 +200,15 @@ function getWorkspaceRouteState(
     };
   }
 
-  const courseSlug = isCourseRoute ? parts[1] : parts[1] === "mqs" ? "default" : (parts[1] ?? defaultCourseSlug);
-  const entityPart = isCourseRoute ? parts[3] : parts[2];
-  const subpathIndex = isCourseRoute ? 4 : 3;
+  const courseSlug =
+    isCourseRoute || isCohortRoute
+      ? parts[1]
+      : parts[1] === "mqs"
+        ? "default"
+        : (parts[1] ?? defaultCourseSlug);
+  const cohortTag = isCohortRoute ? parts[3] : undefined;
+  const entityPart = isCohortRoute ? parts[5] : isCourseRoute ? parts[3] : parts[2];
+  const subpathIndex = isCohortRoute ? 6 : isCourseRoute ? 4 : 3;
   const entity = validateEntityKey(appSchema, entityPart);
   const attendanceTaking = entity === "attendanceRecords" && parts[subpathIndex] === "take";
   const manualPoints = entity === "points" && parts[subpathIndex] === "manual";
@@ -212,6 +227,7 @@ function getWorkspaceRouteState(
 
   return {
     canonicalPath: dashboardPath({
+      cohortTag,
       courseSlug,
       entity,
       mode,
@@ -219,6 +235,7 @@ function getWorkspaceRouteState(
       subpage: attendanceTaking ? "take" : manualPoints ? "manual" : undefined,
     }),
     attendanceTaking,
+    cohortTag,
     entity,
     manualPoints,
     mode,
@@ -617,10 +634,13 @@ function SignedInWorkspace({
   const { hasAdminUiAccess, isLoading } = useAuth();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const selectedCourse =
     courses.find((course) => course.slug === routeState.courseSlug) ?? null;
+  const activeCohort =
+    cohorts.find((cohort) => cohort.tag === routeState.cohortTag) ?? cohorts[0] ?? null;
   const isFocusedCoursePage = [
     "courseDelete",
     "courseDetail",
@@ -646,9 +666,23 @@ function SignedInWorkspace({
     }
   }
 
+  async function refreshCohorts(course: Course | null) {
+    if (!course) {
+      setCohorts([]);
+      return;
+    }
+
+    const nextCohorts = await listCohorts(course.id);
+    setCohorts(nextCohorts);
+  }
+
   useEffect(() => {
     void refreshCourses();
   }, []);
+
+  useEffect(() => {
+    void refreshCohorts(activeCourse);
+  }, [activeCourse?.id]);
 
   useEffect(() => {
     if (
@@ -658,6 +692,7 @@ function SignedInWorkspace({
     ) {
       void navigate({
         to: dashboardPath({
+          cohortTag: activeCohort?.tag,
           courseSlug: activeCourse.slug,
           entity: routeState.entity,
           mode: routeState.mode,
@@ -830,6 +865,7 @@ function SignedInWorkspace({
 
   return (
     <CrudDashboard
+      activeCohort={activeCohort}
       activeEntityKey={routeState.entity}
       activeCourse={activeCourse}
       activeSchema={appSchema}

@@ -54,6 +54,7 @@ import {
   updateCourse,
   updateRow,
   type AdminUser,
+  type Cohort,
   type Course,
   type CrudRow,
   type CrudValue,
@@ -67,6 +68,27 @@ import {
   type FieldDefinition,
   type SchemaName,
 } from "../crud/entities";
+import {
+  blobToDataUrl,
+  buildGroupAttendanceStats,
+  buildGroupFileName,
+  buildZipBlob,
+  buildZipFileName,
+  copyBlobToClipboard,
+  getDateRangeSessions,
+  renderAttendanceChartPngBlob,
+  triggerBlobDownload,
+  type AttendanceChartData,
+} from "../crud/attendanceCharts";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Select } from "./ui/select";
 import {
   cleanSearch,
   coursePath,
@@ -287,6 +309,8 @@ const ui = {
 };
 
 const entityIcons: Record<EntityKey, LucideIcon> = {
+  cohorts: Layers3,
+  cohortEnrollments: ListChecks,
   students: GraduationCap,
   teachers: UserRound,
   groups: UsersRound,
@@ -348,6 +372,15 @@ function toInputValue(value: CrudValue, field: FieldDefinition) {
 function getTodayDateString() {
   const now = new Date();
   const offsetDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return offsetDate.toISOString().slice(0, 10);
+}
+
+function getDateDaysAgoString(days: number) {
+  const now = new Date();
+  const target = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const offsetDate = new Date(
+    target.getTime() - target.getTimezoneOffset() * 60_000,
+  );
   return offsetDate.toISOString().slice(0, 10);
 }
 
@@ -644,7 +677,7 @@ function EntityNav({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 right-0 z-[80] w-72 max-w-[82vw] overflow-y-auto border-l border-white/70 bg-white/95 p-4 shadow-2xl shadow-slate-900/20 backdrop-blur transition-transform duration-200 ${
+      className={`fixed inset-y-0 right-0 z-[80] w-72 max-w-[82vw] overflow-y-auto border-l border-white/70 bg-white/95 p-4 shadow-2xl shadow-slate-900/20 backdrop-blur transition-transform duration-200 xl:translate-x-0 xl:pt-0 ${
         isOpen ? "translate-x-0" : "translate-x-full"
       }`}
     >
@@ -652,7 +685,7 @@ function EntityNav({
         <h2 className="px-1 text-sm font-bold text-slate-500">{ui.crudPages}</h2>
         <button
           aria-label={ui.cancel}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 xl:hidden"
           onClick={onClose}
           title={ui.cancel}
           type="button"
@@ -2546,6 +2579,14 @@ function AttendanceWorkspace({
   const [selectedGroupId, setSelectedGroupId] = useState<CrudValue | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<CrudValue | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [chartFromDate, setChartFromDate] = useState(getDateDaysAgoString(30));
+  const [chartToDate, setChartToDate] = useState(getTodayDateString());
+  const [exportGroupId, setExportGroupId] = useState<string>("all");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewMeta, setPreviewMeta] = useState<AttendanceChartData | null>(null);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [chartBusy, setChartBusy] = useState(false);
 
   const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
   const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
@@ -2667,6 +2708,114 @@ function AttendanceWorkspace({
   }
 
   const groupColor = getGroupColorByCode(selectedGroup?.colorCode);
+  const chartSessions = useMemo(
+    () => getDateRangeSessions(sessions, chartFromDate, chartToDate),
+    [chartFromDate, chartToDate, sessions],
+  );
+  const groupStats = useMemo(
+    () => buildGroupAttendanceStats(groups, students, chartSessions, records),
+    [chartSessions, groups, records, students],
+  );
+  const selectedGroupStat =
+    exportGroupId === "all"
+      ? null
+      : groupStats.find((stat) => stat.groupId === exportGroupId) ?? null;
+  const canRunExports = chartSessions.length > 0 && groupStats.length > 0;
+
+  async function handlePreviewChart() {
+    if (!selectedGroupStat) {
+      setChartError("اختر مجموعة واحدة للمعاينة.");
+      return;
+    }
+
+    setChartError(null);
+    setChartBusy(true);
+
+    try {
+      const blob = await renderAttendanceChartPngBlob(
+        selectedGroupStat,
+        chartFromDate,
+        chartToDate,
+      );
+      const dataUrl = await blobToDataUrl(blob);
+      setPreviewMeta(selectedGroupStat);
+      setPreviewImageUrl(dataUrl);
+      setPreviewOpen(true);
+    } catch (error) {
+      setChartError(error instanceof Error ? error.message : ui.createError);
+    } finally {
+      setChartBusy(false);
+    }
+  }
+
+  async function handleCopyChart() {
+    if (!selectedGroupStat) {
+      setChartError("اختر مجموعة واحدة للنسخ.");
+      return;
+    }
+
+    setChartError(null);
+    setChartBusy(true);
+
+    try {
+      const blob = await renderAttendanceChartPngBlob(
+        selectedGroupStat,
+        chartFromDate,
+        chartToDate,
+      );
+      await copyBlobToClipboard(blob);
+    } catch (error) {
+      setChartError(error instanceof Error ? error.message : ui.createError);
+    } finally {
+      setChartBusy(false);
+    }
+  }
+
+  async function handleDownloadPng() {
+    if (!selectedGroupStat) {
+      setChartError("اختر مجموعة واحدة لتنزيل صورة PNG.");
+      return;
+    }
+
+    setChartError(null);
+    setChartBusy(true);
+
+    try {
+      const blob = await renderAttendanceChartPngBlob(
+        selectedGroupStat,
+        chartFromDate,
+        chartToDate,
+      );
+      triggerBlobDownload(
+        blob,
+        buildGroupFileName(selectedGroupStat.groupName, chartFromDate, chartToDate),
+      );
+    } catch (error) {
+      setChartError(error instanceof Error ? error.message : ui.createError);
+    } finally {
+      setChartBusy(false);
+    }
+  }
+
+  async function handleDownloadZip() {
+    setChartError(null);
+    setChartBusy(true);
+
+    try {
+      const files = await Promise.all(
+        groupStats.map(async (stat) => ({
+          name: buildGroupFileName(stat.groupName, chartFromDate, chartToDate),
+          blob: await renderAttendanceChartPngBlob(stat, chartFromDate, chartToDate),
+        })),
+      );
+      const zipBlob = await buildZipBlob(files);
+      triggerBlobDownload(zipBlob, buildZipFileName(chartFromDate, chartToDate));
+    } catch (error) {
+      setChartError(error instanceof Error ? error.message : ui.createError);
+    } finally {
+      setChartBusy(false);
+    }
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-xl shadow-cedar/5">
@@ -2867,6 +3016,90 @@ function AttendanceWorkspace({
                 {groupStudents.length} طالب
               </span>
             </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
+              <p className="text-sm font-bold text-ink">Image Generator</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Generate attendance chart images by group and date range.
+              </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <label className="text-xs font-bold text-slate-700">
+                  Group
+                  <Select
+                    className="mt-1"
+                    onChange={(event) => setExportGroupId(event.target.value)}
+                    value={exportGroupId}
+                  >
+                    <option value="all">All groups</option>
+                    {groups.map((group) => (
+                      <option key={String(group.id)} value={String(group.id)}>
+                        {formatValue(group.name)}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs font-bold text-slate-700">
+                    From
+                    <input
+                      className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cedar/25"
+                      onChange={(event) => setChartFromDate(event.target.value)}
+                      type="date"
+                      value={chartFromDate}
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    To
+                    <input
+                      className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cedar/25"
+                      onChange={(event) => setChartToDate(event.target.value)}
+                      type="date"
+                      value={chartToDate}
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  disabled={chartBusy || !canRunExports || exportGroupId === "all"}
+                  onClick={() => void handlePreviewChart()}
+                  size="sm"
+                  variant="outline"
+                >
+                  Preview
+                </Button>
+                <Button
+                  disabled={chartBusy || !canRunExports || exportGroupId === "all"}
+                  onClick={() => void handleCopyChart()}
+                  size="sm"
+                  variant="outline"
+                >
+                  Copy
+                </Button>
+                <Button
+                  disabled={chartBusy || !canRunExports || exportGroupId === "all"}
+                  onClick={() => void handleDownloadPng()}
+                  size="sm"
+                >
+                  {chartBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Download PNG
+                </Button>
+                <Button
+                  disabled={chartBusy || !canRunExports}
+                  onClick={() => void handleDownloadZip()}
+                  size="sm"
+                  variant="secondary"
+                >
+                  {chartBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Download ZIP
+                </Button>
+              </div>
+              {!canRunExports ? (
+                <p className="mt-2 text-xs text-amber-700">No sessions found in this date range.</p>
+              ) : null}
+              {chartError ? (
+                <p className="mt-2 text-xs text-amber-700">{chartError}</p>
+              ) : null}
+            </div>
             <div className="mt-4 grid gap-2 md:grid-cols-2">
               {groupStudents.map((student) => {
                 const studentRecords = recordsByStudent.get(String(student.id)) ?? [];
@@ -2894,6 +3127,27 @@ function AttendanceWorkspace({
           </div>
         </div>
       ) : null}
+      <Dialog onOpenChange={setPreviewOpen} open={previewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Attendance Preview</DialogTitle>
+            <DialogDescription>
+              {previewMeta
+                ? `${previewMeta.groupName} | ${chartFromDate} to ${chartToDate}`
+                : "Chart preview"}
+            </DialogDescription>
+          </DialogHeader>
+          {previewImageUrl ? (
+            <img
+              alt="Attendance chart preview"
+              className="w-full rounded-xl border border-slate-200"
+              src={previewImageUrl}
+            />
+          ) : (
+            <p className="text-sm text-slate-500">No preview generated yet.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {viewMode === "taking" ? (
         <div className="space-y-4 p-3 lg:p-4">
@@ -3036,6 +3290,7 @@ function AttendanceWorkspace({
 
 export function CrudDashboard({
   activeEntityKey,
+  activeCohort,
   activeCourse,
   activeSchema,
   attendanceTaking = false,
@@ -3046,6 +3301,7 @@ export function CrudDashboard({
   topAccessory,
 }: {
   activeEntityKey: EntityKey;
+  activeCohort?: Cohort | null;
   activeCourse: Course;
   activeSchema: SchemaName;
   attendanceTaking?: boolean;
@@ -3123,7 +3379,7 @@ export function CrudDashboard({
     setError(null);
 
     try {
-      setRows(await listRows(entity, activeCourse));
+      setRows(await listRows(entity, activeCourse, activeCohort ?? undefined));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : ui.loadError);
     } finally {
@@ -3135,7 +3391,12 @@ export function CrudDashboard({
     const entries = await Promise.all(
       relationEntityIds.map(async (entityId) => {
         const entity = findEntityDefinition(entityId, entityDefinitions);
-        return entity ? ([entityId, await listRows(entity, activeCourse)] as const) : null;
+        return entity
+          ? ([
+              entityId,
+              await listRows(entity, activeCourse, activeCohort ?? undefined),
+            ] as const)
+          : null;
       }),
     );
 
@@ -3151,7 +3412,7 @@ export function CrudDashboard({
   useEffect(() => {
     setSelectedRow(null);
     void refreshRows(activeEntity);
-  }, [activeCourse, activeEntity]);
+  }, [activeCohort, activeCourse, activeEntity]);
 
   useEffect(() => {
     if (!rowId || (mode !== "detail" && mode !== "edit")) {
@@ -3182,7 +3443,7 @@ export function CrudDashboard({
     return () => {
       isMounted = false;
     };
-  }, [activeCourse, entityDefinitions, relationEntityIds]);
+  }, [activeCohort, activeCourse, entityDefinitions, relationEntityIds]);
 
   async function handleSoftDelete(row: CrudRow) {
     const label = getRowLabel(activeEntity, row);
@@ -3199,11 +3460,12 @@ export function CrudDashboard({
       return;
     }
 
-    await softDeleteRow(activeEntity, id, activeCourse);
+    await softDeleteRow(activeEntity, id, activeCourse, activeCohort ?? undefined);
     await refreshRows();
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
         entity: getEntityKey(activeEntity.id),
       }),
       search: cleanSearch({ q: searchTerm }),
@@ -3240,11 +3502,12 @@ export function CrudDashboard({
   }, [activeEntity, entityDefinitions, relationOptions, rows, searchTerm]);
 
   async function handleCreate(values: Record<string, CrudValue>) {
-    await createRow(activeEntity, values, activeCourse);
+    await createRow(activeEntity, values, activeCourse, activeCohort ?? undefined);
     await refreshRows();
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
         entity: getEntityKey(activeEntity.id),
       }),
       search: cleanSearch({ q: searchTerm }),
@@ -3256,11 +3519,18 @@ export function CrudDashboard({
       return;
     }
 
-    await updateRow(activeEntity, Number(selectedRow.id), values, activeCourse);
+    await updateRow(
+      activeEntity,
+      Number(selectedRow.id),
+      values,
+      activeCourse,
+      activeCohort ?? undefined,
+    );
     await refreshRows();
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
         entity: getEntityKey(activeEntity.id),
         mode: "detail",
         rowId: selectedRow.id,
@@ -3276,13 +3546,19 @@ export function CrudDashboard({
     existingRecord?: CrudRow,
   ) {
     if (existingRecord?.id !== undefined && existingRecord.id !== null) {
-      await updateRow(activeEntity, Number(existingRecord.id), { status }, activeCourse);
+      await updateRow(
+        activeEntity,
+        Number(existingRecord.id),
+        { status },
+        activeCourse,
+        activeCohort ?? undefined,
+      );
     } else {
       await createRow(activeEntity, {
         studentId,
         attendanceSessionId: sessionId,
         status,
-      }, activeCourse);
+      }, activeCourse, activeCohort ?? undefined);
     }
 
     await refreshRows();
@@ -3307,6 +3583,7 @@ export function CrudDashboard({
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
         entity,
         mode: "detail",
         rowId: relatedRow.id,
@@ -3324,6 +3601,7 @@ export function CrudDashboard({
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
         entity: next.entity ?? getEntityKey(activeEntity.id),
         mode: next.mode,
         rowId: next.rowId,
@@ -3352,7 +3630,7 @@ export function CrudDashboard({
           <button
             aria-expanded={isSidebarOpen}
             aria-label={ui.crudPages}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm xl:hidden"
             onClick={() => setIsSidebarOpen(true)}
             title={ui.crudPages}
             type="button"
@@ -3372,7 +3650,7 @@ export function CrudDashboard({
       {isSidebarOpen ? (
         <button
           aria-label={ui.cancel}
-          className="fixed inset-0 z-[70] cursor-default bg-slate-950/30 backdrop-blur-[1px]"
+          className="fixed inset-0 z-[70] cursor-default bg-slate-950/30 backdrop-blur-[1px] xl:hidden"
           onClick={() => setIsSidebarOpen(false)}
           type="button"
         />
@@ -3394,6 +3672,7 @@ export function CrudDashboard({
           void navigate({
             to: dashboardPath({
               courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
               entity: "attendanceRecords",
               subpage: "take",
             }),
@@ -3402,7 +3681,7 @@ export function CrudDashboard({
         }}
       />
 
-      <section className="min-w-0 space-y-4 sm:space-y-5">
+      <section className="min-w-0 space-y-4 sm:space-y-5 xl:pr-80 xl:pt-0">
 
         {error ? (
           <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -3419,6 +3698,7 @@ export function CrudDashboard({
               void navigate({
                 to: dashboardPath({
                   courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
                   entity: "points",
                 }),
                 search: {},
@@ -3439,6 +3719,7 @@ export function CrudDashboard({
               void navigate({
                 to: dashboardPath({
                   courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
                   entity: "points",
                   subpage: "manual",
                 }),
@@ -3553,6 +3834,7 @@ export function CrudDashboard({
               void navigate({
                 to: dashboardPath({
                   courseSlug: activeCourse.slug,
+        cohortTag: activeCohort?.tag,
                   entity: "attendanceRecords",
                   subpage: "take",
                 }),
@@ -3805,4 +4087,6 @@ function ActionButton({
     </button>
   );
 }
+
+
 

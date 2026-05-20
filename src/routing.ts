@@ -24,6 +24,7 @@ export type RouteSearch = {
 };
 export type DraftValues = Record<string, CrudValue>;
 export type WorkspaceContext = {
+  cohortTag?: string;
   courseSlug: string;
 };
 
@@ -51,19 +52,22 @@ export function validateEntityKey(schema: SchemaName, entity: string | undefined
 }
 
 export function dashboardPath({
+  cohortTag,
   courseSlug,
   entity,
   mode = "list",
   rowId,
   subpage,
 }: {
+  cohortTag?: string;
   courseSlug: string;
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
   subpage?: "manual" | "take";
 }) {
-  const basePath = `/courses/${courseSlug}/dashboard/${entity}`;
+  const cohortSegment = cohortTag ? `/cohorts/${cohortTag}` : "";
+  const basePath = `/courses/${courseSlug}${cohortSegment}/dashboard/${entity}`;
 
   if (subpage === "manual") {
     return `${basePath}/manual`;

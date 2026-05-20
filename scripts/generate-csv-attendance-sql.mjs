@@ -9,18 +9,36 @@ const courseSlug =
     const index = process.argv.indexOf("--course-slug");
     return index >= 0 ? process.argv[index + 1] : undefined;
   })();
-const csvFileName =
-  readdirSync(process.cwd()).find((fileName) => fileName.endsWith(".csv")) ??
-  "";
+const requestedCsvFileName = process.env.CSV_FILE_NAME;
+const csvFileName = (() => {
+  const csvFiles = readdirSync(process.cwd()).filter((fileName) =>
+    fileName.endsWith(".csv"),
+  );
+  if (requestedCsvFileName) {
+    return csvFiles.find((fileName) => fileName === requestedCsvFileName) ?? "";
+  }
+  if (courseSlug) {
+    const bySlug = csvFiles.find((fileName) =>
+      fileName.toLowerCase().includes(courseSlug.toLowerCase()),
+    );
+    if (bySlug) return bySlug;
+  }
+  return csvFiles[0] ?? "";
+})();
 const csvPath = join(process.cwd(), csvFileName);
 const outputPath = join(process.cwd(), "sql", "import_csv_attendance.sql");
 
 const STATUS_BY_CELL = new Map([
   ["حاضر", "present"],
   ["تأخير", "late"],
+  ["TRUE", "present"],
+  ["True", "present"],
+  ["true", "present"],
 ]);
+const EMPTY_ATTENDANCE_VALUES = new Set(["FALSE", "False", "false"]);
 const UNASSIGNED_GROUP = "Unassigned";
 const ATTENDANCE_START_INDEX = 11;
+const scopedGroupName = (groupName) => `${groupName} [${courseSlug}]`;
 
 function parseCsv(input) {
   const rows = [];
@@ -85,9 +103,30 @@ function sqlValues(rows) {
 }
 
 function parseSession(header, occurrences) {
+  const normalized = String(header).trim();
+  const isoLikeMatch = /^(?<year>\d{4})-(?<month>\d{1,2})-(?<day>\d{1,2})(?:\s|T|$)/.exec(
+    normalized,
+  );
+  if (isoLikeMatch?.groups) {
+    const year = Number(isoLikeMatch.groups.year);
+    const month = Number(isoLikeMatch.groups.month);
+    const dayOfMonth = Number(isoLikeMatch.groups.day);
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(
+      dayOfMonth,
+    ).padStart(2, "0")}`;
+    const occurrenceKey = date;
+    const sequence = (occurrences.get(occurrenceKey) ?? 0) + 1;
+    occurrences.set(occurrenceKey, sequence);
+    return {
+      date,
+      label: normalized,
+      sequence,
+    };
+  }
+
   const match =
     /^(?<day>[A-Za-z]{3}) (?<dayOfMonth>\d{1,2})\/(?<month>\d{1,2})$/.exec(
-      header,
+      normalized,
     );
 
   if (!match?.groups) {
@@ -104,11 +143,7 @@ function parseSession(header, occurrences) {
   const sequence = (occurrences.get(occurrenceKey) ?? 0) + 1;
   occurrences.set(occurrenceKey, sequence);
 
-  return {
-    date,
-    label: header,
-    sequence,
-  };
+  return { date, label: normalized, sequence };
 }
 
 function normalizePhone(value) {
@@ -174,23 +209,24 @@ const attendanceRecords = [];
 
 for (const [rawIndex, row] of rawRows.entries()) {
   const csvLine = rawIndex + 2;
-  const hasStudentIdentity = Boolean(
-    row[0]?.trim() || row[4]?.trim() || row[5]?.trim(),
-  );
-  const hasBooleanFlag = row[3] === "TRUE" || row[3] === "FALSE";
+  const fullName = row[0]?.trim() ?? "";
+  const firstNameField = row[8]?.trim() ?? "";
+  const lastNameField = row[9]?.trim() ?? "";
+  const groupField = row[6]?.trim() ?? "";
+  const hasStudentIdentity = Boolean(fullName || firstNameField || lastNameField);
 
-  if (!hasStudentIdentity || !hasBooleanFlag) {
+  if (!hasStudentIdentity) {
     continue;
   }
 
   const firstName = normalizeNamePart(
-    row[4] ?? "",
-    row[0]?.trim() || "Unknown",
+    firstNameField,
+    fullName || "Unknown",
   );
-  const lastName = normalizeNamePart(row[5] ?? "", "-");
-  const groupName = row[6]?.trim() || UNASSIGNED_GROUP;
-  const familyPhone = fitPhone(row[1] ?? "");
-  const studentPhone = fitPhone(row[2] ?? "");
+  const lastName = normalizeNamePart(lastNameField, "-");
+  const groupName = groupField || UNASSIGNED_GROUP;
+  const studentPhone = fitPhone(row[4] ?? "");
+  const familyPhone = "";
 
   students.push({
     rowNumber: csvLine,
@@ -198,7 +234,7 @@ for (const [rawIndex, row] of rawRows.entries()) {
     lastName,
     phone: studentPhone,
     fatherPhone: familyPhone,
-    groupName,
+    groupName: scopedGroupName(groupName),
   });
 
   for (const session of sessions) {
@@ -211,6 +247,8 @@ for (const [rawIndex, row] of rawRows.entries()) {
         session,
         status,
       });
+    } else if (EMPTY_ATTENDANCE_VALUES.has(cellValue)) {
+      continue;
     } else if (cellValue) {
       throw new Error(
         `Unknown attendance value "${cellValue}" at CSV line ${csvLine}, column "${session.label}".`,
@@ -220,7 +258,10 @@ for (const [rawIndex, row] of rawRows.entries()) {
 }
 
 const groupNames = Array.from(
-  new Set([...students.map((student) => student.groupName), UNASSIGNED_GROUP]),
+  new Set([
+    ...students.map((student) => student.groupName),
+    scopedGroupName(UNASSIGNED_GROUP),
+  ]),
 ).sort((left, right) => left.localeCompare(right, "ar"));
 
 const teacherRows = groupNames.map((groupName) => [
@@ -425,13 +466,11 @@ FROM source
 CROSS JOIN _target_course target
 JOIN ${schema}.teacher teacher
   ON teacher."group" = source.name
- AND teacher.course_id = target.course_id
  AND teacher.deleted_at IS NULL
 WHERE NOT EXISTS (
   SELECT 1
   FROM ${schema}.groups existing
   WHERE existing.name = source.name
-    AND existing.course_id = target.course_id
     AND existing.deleted_at IS NULL
 );
 
@@ -462,7 +501,6 @@ FROM _csv_students source
 CROSS JOIN _target_course target
 JOIN ${schema}.groups groups
   ON groups.name = source.group_name
- AND groups.course_id = target.course_id
  AND groups.deleted_at IS NULL
 WHERE NOT EXISTS (
   SELECT 1
@@ -499,7 +537,6 @@ student_ranked AS (
   CROSS JOIN _target_course target
   JOIN ${schema}.groups groups
     ON groups.id = students.group_id
-   AND groups.course_id = target.course_id
    AND groups.deleted_at IS NULL
   WHERE students.course_id = target.course_id
     AND students.deleted_at IS NULL

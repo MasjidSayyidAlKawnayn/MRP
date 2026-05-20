@@ -31,6 +31,10 @@ const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/dashboard/$entity",
 });
+const cohortDashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity",
+});
 
 const attendanceTakingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -130,6 +134,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
     dashboardRoute,
+    cohortDashboardRoute,
     attendanceTakingRoute,
     manualPointsRoute,
     createRoutePage,
