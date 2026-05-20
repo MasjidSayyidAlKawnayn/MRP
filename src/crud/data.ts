@@ -6,6 +6,8 @@ export type CrudRow = Record<string, string | number | boolean | null>;
 export type CrudValue = string | number | boolean | null;
 export type CourseId = number;
 export type CourseSlug = string;
+export type CohortId = number;
+export type CohortTag = string;
 
 export interface Course {
   id: CourseId;
@@ -13,6 +15,26 @@ export interface Course {
   name: string;
   description: string | null;
   isActive: boolean;
+}
+
+export interface Cohort {
+  id: CohortId;
+  courseId: CourseId;
+  name: string;
+  tag: CohortTag;
+  status: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  previousCohortId: CohortId | null;
+  deletedAt: string | null;
+}
+
+export interface CohortEnrollment {
+  id: number;
+  studentId: number;
+  cohortId: CohortId;
+  enrollmentType: string;
+  outcome: string | null;
 }
 
 export interface AdminUser {
@@ -27,6 +49,16 @@ export type CourseInput = {
   isActive?: boolean;
   name: string;
   slug: string;
+};
+
+export type CohortInput = {
+  courseId: CourseId;
+  endsAt?: string | null;
+  name: string;
+  previousCohortId?: CohortId | null;
+  startsAt?: string | null;
+  status?: string;
+  tag: string;
 };
 
 export type AdminUserInput = {
@@ -108,11 +140,30 @@ function applyCoursePayload(
   entity: EntityDefinition,
   values: Record<string, CrudValue>,
   course?: Course,
+  cohort?: Cohort,
 ) {
-  const { course_id: _courseIdColumn, courseId: _courseIdKey, ...payload } =
+  const {
+    cohort_id: _cohortIdColumn,
+    cohortId: _cohortIdKey,
+    course_id: _courseIdColumn,
+    courseId: _courseIdKey,
+    ...payload
+  } =
     values;
 
-  if (!entity.courseScoped || !course) {
+  if (!entity.courseScoped && !entity.cohortScoped) {
+    return payload;
+  }
+
+  if (entity.cohortScoped && cohort) {
+    return {
+      ...payload,
+      cohort_id: cohort.id,
+      course_id: cohort.courseId,
+    };
+  }
+
+  if (!course) {
     return payload;
   }
 
@@ -129,6 +180,23 @@ function toCourse(row: Record<string, unknown>): Course {
     name: String(row.name),
     description: typeof row.description === "string" ? row.description : null,
     isActive: row.is_active !== false,
+  };
+}
+
+function toCohort(row: Record<string, unknown>): Cohort {
+  return {
+    id: Number(row.id),
+    courseId: Number(row.course_id),
+    name: String(row.name),
+    tag: String(row.tag),
+    status: typeof row.status === "string" ? row.status : "active",
+    startsAt: typeof row.starts_at === "string" ? row.starts_at : null,
+    endsAt: typeof row.ends_at === "string" ? row.ends_at : null,
+    previousCohortId:
+      row.previous_cohort_id === null || row.previous_cohort_id === undefined
+        ? null
+        : Number(row.previous_cohort_id),
+    deletedAt: typeof row.deleted_at === "string" ? row.deleted_at : null,
   };
 }
 
@@ -177,6 +245,57 @@ export async function getCourseBySlug(slug: string) {
 
   throwIfError(response.error);
   return response.data ? toCourse(response.data as Record<string, unknown>) : null;
+}
+
+export async function listCohorts(courseId: CourseId, { includeArchived = false } = {}) {
+  const client = getAppClient();
+  let query = client
+    .from("cohorts")
+    .select("*")
+    .eq("course_id", courseId)
+    .order("id", { ascending: true });
+
+  if (!includeArchived) {
+    query = query.is("deleted_at", null);
+  }
+
+  const response = await query;
+  throwIfError(response.error);
+  return ((response.data ?? []) as Record<string, unknown>[]).map(toCohort);
+}
+
+export async function getCohortByTag(courseId: CourseId, tag: string) {
+  const client = getAppClient();
+  const response = await client
+    .from("cohorts")
+    .select("*")
+    .eq("course_id", courseId)
+    .eq("tag", tag)
+    .is("deleted_at", null)
+    .single();
+
+  throwIfError(response.error);
+  return response.data ? toCohort(response.data as Record<string, unknown>) : null;
+}
+
+export async function createCohort(values: CohortInput) {
+  const client = getAppClient();
+  const response = await client
+    .from("cohorts")
+    .insert({
+      course_id: values.courseId,
+      ends_at: values.endsAt ?? null,
+      name: values.name,
+      previous_cohort_id: values.previousCohortId ?? null,
+      starts_at: values.startsAt ?? null,
+      status: values.status ?? "active",
+      tag: normalizeSlug(values.tag),
+    })
+    .select()
+    .single();
+
+  throwIfError(response.error);
+  return response.data ? toCohort(response.data as Record<string, unknown>) : null;
 }
 
 async function seedDefaultPageTiers(course: Course) {
@@ -384,7 +503,11 @@ export function getRowLabel(entity: EntityDefinition, row: CrudRow) {
   return label || `${entity.singularLabel} #${formatValue(row.id)}`;
 }
 
-export async function listRows(entity: EntityDefinition, course?: Course) {
+export async function listRows(
+  entity: EntityDefinition,
+  course?: Course,
+  cohort?: Cohort,
+) {
   const client = getSchemaClient(entity.schema);
   let query = client
     .from(entity.table)
@@ -396,6 +519,10 @@ export async function listRows(entity: EntityDefinition, course?: Course) {
     query = query.eq("course_id", course.id);
   }
 
+  if (entity.cohortScoped && cohort) {
+    query = query.eq("cohort_id", cohort.id);
+  }
+
   const response = await query;
 
   throwIfError(response.error);
@@ -404,7 +531,12 @@ export async function listRows(entity: EntityDefinition, course?: Course) {
   );
 }
 
-export async function getRow(entity: EntityDefinition, id: number, course?: Course) {
+export async function getRow(
+  entity: EntityDefinition,
+  id: number,
+  course?: Course,
+  cohort?: Cohort,
+) {
   const client = getSchemaClient(entity.schema);
   let query = client
     .from(entity.table)
@@ -413,6 +545,10 @@ export async function getRow(entity: EntityDefinition, id: number, course?: Cour
 
   if (entity.courseScoped && course) {
     query = query.eq("course_id", course.id);
+  }
+
+  if (entity.cohortScoped && cohort) {
+    query = query.eq("cohort_id", cohort.id);
   }
 
   const response = await query.single();
@@ -427,11 +563,12 @@ export async function createRow(
   entity: EntityDefinition,
   values: Record<string, CrudValue>,
   course?: Course,
+  cohort?: Cohort,
 ) {
   const client = getSchemaClient(entity.schema);
   const response = await client
     .from(entity.table)
-    .insert(applyCoursePayload(entity, toDbPayload(entity, values), course))
+    .insert(applyCoursePayload(entity, toDbPayload(entity, values), course, cohort))
     .select()
     .single();
 
@@ -449,6 +586,7 @@ export async function createRows(
   entity: EntityDefinition,
   values: Record<string, CrudValue>[],
   course?: Course,
+  cohort?: Cohort,
 ) {
   if (values.length === 0) {
     return [];
@@ -459,7 +597,7 @@ export async function createRows(
     .from(entity.table)
     .insert(
       values.map((value) =>
-        applyCoursePayload(entity, toDbPayload(entity, value), course),
+        applyCoursePayload(entity, toDbPayload(entity, value), course, cohort),
       ),
     )
     .select();
@@ -475,6 +613,7 @@ export async function updateRow(
   id: number,
   values: Record<string, CrudValue>,
   course?: Course,
+  cohort?: Cohort,
 ) {
   const client = getSchemaClient(entity.schema);
   let query = client
@@ -486,12 +625,18 @@ export async function updateRow(
           ...values,
           updatedAt: new Date().toISOString(),
         }),
+        course,
+        cohort,
       ),
     )
     .eq("id", id);
 
   if (entity.courseScoped && course) {
     query = query.eq("course_id", course.id);
+  }
+
+  if (entity.cohortScoped && cohort) {
+    query = query.eq("cohort_id", cohort.id);
   }
 
   const response = await query.select().single();
@@ -502,7 +647,12 @@ export async function updateRow(
     : null;
 }
 
-export async function softDeleteRow(entity: EntityDefinition, id: number, course?: Course) {
+export async function softDeleteRow(
+  entity: EntityDefinition,
+  id: number,
+  course?: Course,
+  cohort?: Cohort,
+) {
   const client = getSchemaClient(entity.schema);
   const now = new Date().toISOString();
   let query = client
@@ -512,6 +662,10 @@ export async function softDeleteRow(entity: EntityDefinition, id: number, course
 
   if (entity.courseScoped && course) {
     query = query.eq("course_id", course.id);
+  }
+
+  if (entity.cohortScoped && cohort) {
+    query = query.eq("cohort_id", cohort.id);
   }
 
   const response = await query.select().single();

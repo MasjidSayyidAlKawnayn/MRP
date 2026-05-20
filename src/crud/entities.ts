@@ -8,6 +8,8 @@ export type FieldType =
   | "textarea";
 
 export type EntityKey =
+  | "cohorts"
+  | "cohortEnrollments"
   | "students"
   | "teachers"
   | "groups"
@@ -45,6 +47,7 @@ export interface EntityDefinition {
   singularLabel: string;
   description: string;
   courseScoped?: boolean;
+  cohortScoped?: boolean;
   showInNav?: boolean;
   fields: FieldDefinition[];
   listFields: string[];
@@ -102,12 +105,112 @@ const attendanceSessionRelation = {
   labelFields: ["sessionDate", "label"],
 } satisfies FieldDefinition["relation"];
 
+const cohortRelation = {
+  entityId: "mqs.cohorts",
+  labelFields: ["name", "tag"],
+} satisfies FieldDefinition["relation"];
+
 const memorizationPageRelation = {
   entityId: "mqs.pages",
   labelFields: ["page"],
 } satisfies FieldDefinition["relation"];
 
 const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
+  {
+    table: "cohorts",
+    label: "Cohorts",
+    singularLabel: "Cohort",
+    description: "Manage repeatable course runs with flexible dates and tags.",
+    courseScoped: true,
+    cohortScoped: false,
+    fields: [
+      idField,
+      {
+        key: "name",
+        column: "name",
+        label: "Name",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "tag",
+        column: "tag",
+        label: "Tag",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "status",
+        column: "status",
+        label: "Status",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "startsAt",
+        column: "starts_at",
+        label: "Starts at",
+        type: "date",
+      },
+      {
+        key: "endsAt",
+        column: "ends_at",
+        label: "Ends at",
+        type: "date",
+      },
+      {
+        key: "previousCohortId",
+        column: "previous_cohort_id",
+        label: "Previous cohort",
+        type: "number",
+        relation: cohortRelation,
+      },
+      ...timestamps,
+    ],
+    listFields: ["id", "name", "tag", "status", "startsAt", "endsAt"],
+    displayFields: ["name", "tag"],
+  },
+  {
+    table: "cohort_enrollments",
+    label: "Cohort Enrollments",
+    singularLabel: "Cohort Enrollment",
+    description: "Track student participation and outcomes per cohort.",
+    fields: [
+      idField,
+      {
+        key: "studentId",
+        column: "student_id",
+        label: "Student",
+        type: "number",
+        required: true,
+        relation: studentRelation,
+      },
+      {
+        key: "cohortId",
+        column: "cohort_id",
+        label: "Cohort",
+        type: "number",
+        required: true,
+        relation: cohortRelation,
+      },
+      {
+        key: "enrollmentType",
+        column: "enrollment_type",
+        label: "Enrollment type",
+        type: "text",
+        required: true,
+      },
+      {
+        key: "outcome",
+        column: "outcome",
+        label: "Outcome",
+        type: "text",
+      },
+      ...timestamps,
+    ],
+    listFields: ["id", "studentId", "cohortId", "enrollmentType", "outcome"],
+    displayFields: ["studentId", "cohortId"],
+  },
   {
     table: "students",
     label: "Students",
@@ -562,6 +665,8 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
 ] satisfies Omit<EntityDefinition, "id" | "schema">[];
 
 const entityKeys: EntityKey[] = [
+  "cohorts",
+  "cohortEnrollments",
   "students",
   "teachers",
   "groups",
@@ -575,10 +680,10 @@ const entityKeys: EntityKey[] = [
   "attendanceRecords",
 ];
 
-const courseIdField: FieldDefinition = {
-  key: "courseId",
-  column: "course_id",
-  label: "Course",
+const cohortIdField: FieldDefinition = {
+  key: "cohortId",
+  column: "cohort_id",
+  label: "Cohort",
   type: "number",
   readOnly: true,
   required: true,
@@ -617,6 +722,16 @@ const arabicEntities: Record<
     singularLabel: "\u0635\u0641\u062D\u0629 \u062D\u0641\u0638",
     description:
       "\u062A\u0633\u062C\u064A\u0644 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0642\u0631\u0622\u0646 \u0627\u0644\u062A\u064A \u0623\u062A\u0645 \u0627\u0644\u0637\u0627\u0644\u0628 \u062D\u0641\u0638\u0647\u0627.",
+  },
+  cohorts: {
+    label: "الأفواج",
+    singularLabel: "دفعة",
+    description: "إدارة أفواج الدورة مع الوسم والحالة والتواريخ.",
+  },
+  cohortEnrollments: {
+    label: "انتسابات الأفواج",
+    singularLabel: "انتساب دفعة",
+    description: "متابعة الطالب في كل دفعة مع نوع الانتساب ونتيجته.",
   },
   pagePointAwards: {
     label: "\u0646\u0642\u0627\u0637 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u062D\u0641\u0638",
@@ -671,6 +786,13 @@ const arabicFieldLabels: Record<string, string> = {
   group: "\u0627\u0633\u0645 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
   groupId: "\u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
   colorCode: "\u0644\u0648\u0646 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
+  cohortId: "الدفعة",
+  enrollmentType: "نوع الانتساب",
+  outcome: "النتيجة",
+  startsAt: "تاريخ البداية",
+  endsAt: "تاريخ النهاية",
+  previousCohortId: "الدفعة السابقة",
+  tag: "الوسم",
   id: "\u0627\u0644\u0645\u0639\u0631\u0641",
   label: "\u0639\u0646\u0648\u0627\u0646 CSV",
   lastName: "\u0627\u0633\u0645 \u0627\u0644\u0639\u0627\u0626\u0644\u0629",
@@ -733,7 +855,8 @@ export function getEntityDefinitions(schema: SchemaName): EntityDefinition[] {
     ...arabicEntities[entityKeys[index]],
     id: `${schema}.${entityKeys[index]}`,
     schema,
-    courseScoped: true,
+    courseScoped: entity.courseScoped ?? true,
+    cohortScoped: entity.cohortScoped ?? false,
     fields: entity.fields.map((field) =>
       withSchemaRelationIds(
         {
@@ -745,7 +868,7 @@ export function getEntityDefinitions(schema: SchemaName): EntityDefinition[] {
         },
         schema,
       ),
-    ).some((field) => field.key === "courseId")
+    ).some((field) => field.key === "cohortId")
       ? entity.fields.map((field) =>
           withSchemaRelationIds(
             {
@@ -759,7 +882,7 @@ export function getEntityDefinitions(schema: SchemaName): EntityDefinition[] {
           ),
         )
       : [
-          courseIdField,
+          cohortIdField,
           ...entity.fields.map((field) =>
             withSchemaRelationIds(
               {
