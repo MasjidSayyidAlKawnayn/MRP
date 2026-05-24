@@ -150,11 +150,18 @@ a:focus-visible {
 }
 
 .neon-auth-ui .login-auth-shell input {
+  color: #17211f;
   direction: ltr;
 }
 
 .neon-auth-ui .login-auth-shell input::placeholder {
   color: #9a9388;
+}
+
+.neon-auth-ui .login-auth-shell input:-webkit-autofill,
+.neon-auth-ui .login-auth-shell input:-webkit-autofill:hover,
+.neon-auth-ui .login-auth-shell input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #17211f;
 }
 
 .neon-auth-ui .login-auth-shell button[type="submit"] {
