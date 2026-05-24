@@ -3293,6 +3293,7 @@ export function CrudDashboard({
   activeCohort,
   activeCourse,
   activeSchema,
+  attendanceCharts = false,
   attendanceTaking = false,
   manualPoints = false,
   mode,
@@ -3304,6 +3305,7 @@ export function CrudDashboard({
   activeCohort?: Cohort | null;
   activeCourse: Course;
   activeSchema: SchemaName;
+  attendanceCharts?: boolean;
   attendanceTaking?: boolean;
   manualPoints?: boolean;
   mode: ViewMode;
@@ -3847,7 +3849,7 @@ export function CrudDashboard({
           />
         ) : null}
 
-        {!attendanceTaking && activeEntityKey !== "points" ? (
+        {!attendanceTaking && !attendanceCharts && activeEntityKey !== "points" ? (
         <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
           <div className="space-y-2 border-b border-slate-200/80 px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
