@@ -65,3 +65,34 @@ https://<github-user-or-org>.github.io
 ```
 
 The app path will be `/MRP-frontend/`, but the trusted origin is the scheme and host.
+
+### Production incident note (2026-05-24)
+
+Issue observed:
+- Local app returned course data, deployed app returned an empty courses list.
+
+What was fixed:
+1. Confirmed local `.env` Neon values matched the intended branch host.
+2. Confirmed deployed bundle was using the same Neon URLs.
+3. Re-applied Neon `VITE_*` variables at both GitHub scopes to prevent environment override drift:
+- Repository variables
+- `github-pages` environment variables
+4. Triggered a fresh Pages workflow deploy.
+
+Commands used:
+
+```powershell
+gh variable set VITE_NEON_AUTH_URL --repo MasjidSayyidAlKawnayn/MRP --body "https://ep-frosty-glitter-ap3fsq9a.neonauth.c-7.us-east-1.aws.neon.tech/neondb/auth"
+gh variable set VITE_NEON_DATA_API_URL --repo MasjidSayyidAlKawnayn/MRP --body "https://ep-frosty-glitter-ap3fsq9a.apirest.c-7.us-east-1.aws.neon.tech/neondb/rest/v1"
+gh variable set VITE_NEON_APP_SCHEMA --repo MasjidSayyidAlKawnayn/MRP --body "mqs"
+
+gh variable set VITE_NEON_AUTH_URL --repo MasjidSayyidAlKawnayn/MRP --env github-pages --body "https://ep-frosty-glitter-ap3fsq9a.neonauth.c-7.us-east-1.aws.neon.tech/neondb/auth"
+gh variable set VITE_NEON_DATA_API_URL --repo MasjidSayyidAlKawnayn/MRP --env github-pages --body "https://ep-frosty-glitter-ap3fsq9a.apirest.c-7.us-east-1.aws.neon.tech/neondb/rest/v1"
+gh variable set VITE_NEON_APP_SCHEMA --repo MasjidSayyidAlKawnayn/MRP --env github-pages --body "mqs"
+
+gh workflow run pages.yml --repo MasjidSayyidAlKawnayn/MRP
+```
+
+Verification:
+- `gh run watch <run-id> --repo MasjidSayyidAlKawnayn/MRP --exit-status`
+- Open deployed app, re-login, and confirm `get-session` and `courses?...` are both `200` with non-empty payload.
