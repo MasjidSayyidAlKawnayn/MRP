@@ -55,14 +55,14 @@ jobs:
           if [ -n "$VITE_ADMIN_EMAILS" ]; then
             echo "VITE_ADMIN_EMAILS=$VITE_ADMIN_EMAILS" >> "$GITHUB_ENV"
           fi
-          if [ -n "$VITE_NEON_SCHEMAS" ]; then
-            echo "VITE_NEON_SCHEMAS=$VITE_NEON_SCHEMAS" >> "$GITHUB_ENV"
+          if [ -n "$VITE_NEON_APP_SCHEMA" ]; then
+            echo "VITE_NEON_APP_SCHEMA=$VITE_NEON_APP_SCHEMA" >> "$GITHUB_ENV"
           fi
         env:
           VITE_NEON_AUTH_URL: ${{ vars.VITE_NEON_AUTH_URL }}
           VITE_NEON_DATA_API_URL: ${{ vars.VITE_NEON_DATA_API_URL }}
           VITE_ADMIN_EMAILS: ${{ vars.VITE_ADMIN_EMAILS }}
-          VITE_NEON_SCHEMAS: ${{ vars.VITE_NEON_SCHEMAS }}
+          VITE_NEON_APP_SCHEMA: ${{ vars.VITE_NEON_APP_SCHEMA }}
 
       - name: Build
         run: bun run build
