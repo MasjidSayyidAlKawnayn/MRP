@@ -86,6 +86,13 @@ function getSchemaClient(schema: SchemaName) {
     dataApi: {
       url: import.meta.env.VITE_NEON_DATA_API_URL ?? "",
       options: {
+        global: {
+          fetch,
+          headers: {
+            "Accept-Profile": schema,
+            "Content-Profile": schema,
+          },
+        },
         db: { schema: schema as "public" },
       },
     },
