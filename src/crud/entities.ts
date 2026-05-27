@@ -1,4 +1,4 @@
-export type SchemaName = string;
+﻿export type SchemaName = string;
 export type FieldType =
   | "boolean"
   | "date"
@@ -724,14 +724,16 @@ const arabicEntities: Record<
       "\u062A\u0633\u062C\u064A\u0644 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0642\u0631\u0622\u0646 \u0627\u0644\u062A\u064A \u0623\u062A\u0645 \u0627\u0644\u0637\u0627\u0644\u0628 \u062D\u0641\u0638\u0647\u0627.",
   },
   cohorts: {
-    label: "الأفواج",
-    singularLabel: "دفعة",
-    description: "إدارة أفواج الدورة مع الوسم والحالة والتواريخ.",
+    label: "\u0627\u0644\u0623\u0641\u0648\u0627\u062C",
+    singularLabel: "\u062F\u0641\u0639\u0629",
+    description:
+      "\u0625\u062F\u0627\u0631\u0629 \u0623\u0641\u0648\u0627\u062C \u0627\u0644\u062F\u0648\u0631\u0629 \u0645\u0639 \u0627\u0644\u0648\u0633\u0645 \u0648\u0627\u0644\u062D\u0627\u0644\u0629 \u0648\u0627\u0644\u062A\u0648\u0627\u0631\u064A\u062E.",
   },
   cohortEnrollments: {
-    label: "انتسابات الأفواج",
-    singularLabel: "انتساب دفعة",
-    description: "متابعة الطالب في كل دفعة مع نوع الانتساب ونتيجته.",
+    label: "\u0627\u0646\u062A\u0633\u0627\u0628\u0627\u062A \u0627\u0644\u0623\u0641\u0648\u0627\u062C",
+    singularLabel: "\u0627\u0646\u062A\u0633\u0627\u0628 \u062F\u0641\u0639\u0629",
+    description:
+      "\u0645\u062A\u0627\u0628\u0639\u0629 \u0627\u0644\u0637\u0627\u0644\u0628 \u0641\u064A \u0643\u0644 \u062F\u0641\u0639\u0629 \u0645\u0639 \u0646\u0648\u0639 \u0627\u0644\u0627\u0646\u062A\u0633\u0627\u0628 \u0648\u0646\u062A\u064A\u062C\u062A\u0647.",
   },
   pagePointAwards: {
     label: "\u0646\u0642\u0627\u0637 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u062D\u0641\u0638",
@@ -786,13 +788,13 @@ const arabicFieldLabels: Record<string, string> = {
   group: "\u0627\u0633\u0645 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
   groupId: "\u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
   colorCode: "\u0644\u0648\u0646 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
-  cohortId: "الدفعة",
-  enrollmentType: "نوع الانتساب",
-  outcome: "النتيجة",
-  startsAt: "تاريخ البداية",
-  endsAt: "تاريخ النهاية",
-  previousCohortId: "الدفعة السابقة",
-  tag: "الوسم",
+  cohortId: "\u0627\u0644\u062F\u0641\u0639\u0629",
+  enrollmentType: "\u0646\u0648\u0639 \u0627\u0644\u0627\u0646\u062A\u0633\u0627\u0628",
+  outcome: "\u0627\u0644\u0646\u062A\u064A\u062C\u0629",
+  startsAt: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0628\u062F\u0627\u064A\u0629",
+  endsAt: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0646\u0647\u0627\u064A\u0629",
+  previousCohortId: "\u0627\u0644\u062F\u0641\u0639\u0629 \u0627\u0644\u0633\u0627\u0628\u0642\u0629",
+  tag: "\u0627\u0644\u0648\u0633\u0645",
   id: "\u0627\u0644\u0645\u0639\u0631\u0641",
   label: "\u0639\u0646\u0648\u0627\u0646 CSV",
   lastName: "\u0627\u0633\u0645 \u0627\u0644\u0639\u0627\u0626\u0644\u0629",

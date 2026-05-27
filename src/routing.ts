@@ -8,6 +8,7 @@ import {
 } from "./crud/entities";
 
 export type WorkspacePage =
+  | "home"
   | "courseCreate"
   | "courseDelete"
   | "courseDetail"
@@ -64,7 +65,7 @@ export function dashboardPath({
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
-  subpage?: "manual" | "take";
+  subpage?: "manual" | "take" | "charts";
 }) {
   const cohortSegment = cohortTag ? `/cohorts/${cohortTag}` : "";
   const basePath = `/courses/${courseSlug}${cohortSegment}/dashboard/${entity}`;
@@ -75,6 +76,10 @@ export function dashboardPath({
 
   if (subpage === "take") {
     return `${basePath}/take`;
+  }
+
+  if (subpage === "charts") {
+    return `${basePath}/charts`;
   }
 
   if (mode === "create") {
@@ -125,7 +130,7 @@ export function legacyDashboardPath({
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
-  subpage?: "manual" | "take";
+  subpage?: "manual" | "take" | "charts";
 }) {
   return dashboardPath({
     courseSlug: schema === "mqs" ? "default" : schema,

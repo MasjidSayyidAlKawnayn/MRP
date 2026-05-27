@@ -105,7 +105,7 @@ export default function App() {
 
   return (
     <NeonAuthUIProvider
-      authClient={authClient}
+      authClient={authClient as never}
       basePath={authBasePath}
       credentials={{
         forgotPassword: true,
