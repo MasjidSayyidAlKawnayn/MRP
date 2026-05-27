@@ -5,9 +5,8 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import App from "./App";
-import { appSchema } from "./crud/data";
 import type { EntityKey } from "./crud/entities";
-import { dashboardPath, getDefaultEntityKey } from "./routing";
+import { dashboardPath } from "./routing";
 
 const rootRoute = createRootRoute({
   component: App,
@@ -18,13 +17,15 @@ const indexRoute = createRoute({
   path: "/",
   beforeLoad: () => {
     throw redirect({
-      to: dashboardPath({
-        courseSlug: "default",
-        entity: getDefaultEntityKey(appSchema),
-      }),
+      to: "/home",
       replace: true,
     });
   },
+});
+
+const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/home",
 });
 
 const dashboardRoute = createRoute({
@@ -35,10 +36,34 @@ const cohortDashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity",
 });
+const cohortCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/new",
+});
+const cohortDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/$rowId",
+});
+const cohortEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/$rowId/edit",
+});
 
 const attendanceTakingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/dashboard/attendanceRecords/take",
+});
+const attendanceChartsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/dashboard/attendanceRecords/charts",
+});
+const cohortAttendanceTakingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/attendanceRecords/take",
+});
+const cohortAttendanceChartsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/attendanceRecords/charts",
 });
 
 const manualPointsRoute = createRoute({
@@ -120,10 +145,7 @@ const fallbackRoute = createRoute({
   path: "$",
   beforeLoad: () => {
     throw redirect({
-      to: dashboardPath({
-        courseSlug: "default",
-        entity: getDefaultEntityKey(appSchema),
-      }),
+      to: "/home",
       replace: true,
     });
   },
@@ -133,9 +155,16 @@ export const router = createRouter({
   basepath: import.meta.env.BASE_URL,
   routeTree: rootRoute.addChildren([
     indexRoute,
+    homeRoute,
     dashboardRoute,
     cohortDashboardRoute,
+    cohortCreateRoute,
+    cohortDetailRoute,
+    cohortEditRoute,
     attendanceTakingRoute,
+    attendanceChartsRoute,
+    cohortAttendanceTakingRoute,
+    cohortAttendanceChartsRoute,
     manualPointsRoute,
     createRoutePage,
     detailRoute,
