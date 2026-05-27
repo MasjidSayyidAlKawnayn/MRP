@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "db:migrate": "node scripts/run-neon-migrations.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:attendance-sql": "node scripts/generate-csv-attendance-sql.mjs",
@@ -28,11 +29,13 @@
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "autoprefixer": "latest",
     "jsdom": "^26.1.0",
+    "pg": "^8.21.0",
     "postcss": "latest",
     "tailwindcss": "^3.4.17",
     "typescript": "latest",
