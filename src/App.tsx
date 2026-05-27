@@ -4,7 +4,12 @@ import { NeonAuthUIProvider } from "@neondatabase/neon-js/auth/react/ui";
 import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
 import { AuthProvider } from "./auth/AuthContext";
 import { AuthPanel } from "./components/AuthPanel";
-import { authClient, configStatus, hasAppConfig } from "./auth/client";
+import {
+  authClient,
+  configStatus,
+  hasAppConfig,
+  warnForMissingNeonConfig,
+} from "./auth/client";
 
 const appBasePath = import.meta.env.BASE_URL;
 const trimmedBasePath = appBasePath.endsWith("/")
@@ -13,6 +18,8 @@ const trimmedBasePath = appBasePath.endsWith("/")
 const authBasePath = `${trimmedBasePath}/auth`;
 
 const appName = "\u0645\u0646\u0635\u0629 \u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u0645\u0633\u062C\u062F";
+
+warnForMissingNeonConfig();
 
 function toRouterPath(href: string) {
   if (appBasePath !== "/" && href.startsWith(appBasePath)) {
