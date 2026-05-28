@@ -2,6 +2,7 @@
   useEffect,
   useMemo,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type FormEvent,
   type ReactNode,
@@ -16,6 +17,7 @@ import {
   BarChart3,
   Database,
   Eye,
+  FileUp,
   FileText,
   GraduationCap,
   Layers3,
@@ -82,6 +84,12 @@ import {
   triggerBlobDownload,
   type AttendanceChartData,
 } from "../crud/attendanceCharts";
+import {
+  importAttendanceData,
+  parseAttendanceImportFile,
+  type AttendanceImportResult,
+  type ParsedAttendanceImport,
+} from "../crud/importAttendance";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -3584,7 +3592,18 @@ export function CrudDashboard({
             </h1>
           </div>
         </div>
-        <div className="shrink-0">{topAccessory}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          <AttendanceImportDialog
+            activeCohort={activeCohort}
+            activeCourse={activeCourse}
+            activeSchema={activeSchema}
+            onImported={async () => {
+              await refreshRows();
+              await refreshRelationOptions();
+            }}
+          />
+          {topAccessory}
+        </div>
       </div>
 
       <EntityNav
@@ -3999,6 +4018,179 @@ export function CrudDashboard({
         ) : null}
       </section>
     </div>
+  );
+}
+
+function AttendanceImportDialog({
+  activeCohort,
+  activeCourse,
+  activeSchema,
+  onImported,
+}: {
+  activeCohort?: Cohort | null;
+  activeCourse: Course;
+  activeSchema: SchemaName;
+  onImported: () => Promise<void>;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [parsed, setParsed] = useState<ParsedAttendanceImport | null>(null);
+  const [result, setResult] = useState<AttendanceImportResult | null>(null);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setError(null);
+    setParsed(null);
+    setResult(null);
+
+    if (!file) {
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      setParsed(await parseAttendanceImportFile(file));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر قراءة ملف الاستيراد.",
+      );
+    } finally {
+      setIsParsing(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleImport() {
+    if (!parsed) {
+      return;
+    }
+
+    setError(null);
+    setResult(null);
+    setIsImporting(true);
+    try {
+      const importResult = await importAttendanceData({
+        activeCohort,
+        activeCourse,
+        activeSchema,
+        parsed,
+      });
+      setResult(importResult);
+      await onImported();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر استيراد البيانات.",
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        aria-label="استيراد بيانات"
+        className="h-11 w-11 px-0 sm:w-auto sm:px-4"
+        onClick={() => setOpen(true)}
+        title="استيراد بيانات"
+      >
+        <FileUp className="h-5 w-5" aria-hidden="true" />
+        <span className="hidden sm:inline">استيراد</span>
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>استيراد بيانات الحضور</DialogTitle>
+            <DialogDescription>
+              ارفع ملف CSV أو XLSX من ملفات الحضور. سيتم ربط البيانات بالدورة الحالية.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-right">
+            <label className="block rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+              <span className="mb-2 block font-bold text-ink">ملف البيانات</span>
+              <input
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="block w-full text-sm"
+                disabled={isParsing || isImporting}
+                onChange={(event) => void handleFileChange(event)}
+                type="file"
+              />
+            </label>
+
+            {isParsing ? (
+              <p className="flex items-center gap-2 text-sm text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                جاري قراءة الملف...
+              </p>
+            ) : null}
+
+            {parsed ? (
+              <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:grid-cols-2">
+                <p>
+                  <span className="font-bold text-ink">الملف: </span>
+                  {parsed.fileName}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">الطلاب: </span>
+                  {parsed.students.length}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">المجموعات: </span>
+                  {parsed.groups.length}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">جلسات الحضور: </span>
+                  {parsed.sessions.length}
+                </p>
+                <p className="sm:col-span-2">
+                  <span className="font-bold text-ink">سجلات الحضور: </span>
+                  {parsed.attendanceRecords.length}
+                </p>
+              </div>
+            ) : null}
+
+            {result ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                تم الاستيراد: {result.studentsCreated} طالب، {result.groupsCreated} مجموعة،{" "}
+                {result.sessionsCreated} جلسة، {result.attendanceRecordsCreated} سجل حضور جديد،{" "}
+                {result.attendanceRecordsUpdated} سجل محدث.
+              </div>
+            ) : null}
+
+            {error ? (
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={isImporting}
+                onClick={() => setOpen(false)}
+                variant="outline"
+              >
+                {ui.cancel}
+              </Button>
+              <Button disabled={!parsed || isImporting || isParsing} onClick={handleImport}>
+                {isImporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <FileUp className="h-4 w-4" aria-hidden="true" />
+                )}
+                <span>{isImporting ? "جاري الاستيراد..." : "استيراد البيانات"}</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
