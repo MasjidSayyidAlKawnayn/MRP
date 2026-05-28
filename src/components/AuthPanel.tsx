@@ -11,12 +11,14 @@ import {
   ChevronDown,
   Clock3,
   GraduationCap,
+  HelpCircle,
   Home,
   KeyRound,
   LayoutDashboard,
   Layers3,
   LogOut,
   Mail,
+  RotateCcw,
   Settings2,
   ShieldCheck,
   UserRound,
@@ -38,14 +40,23 @@ import {
   appSchema,
   listCohorts,
   listCourses,
+  listRows,
   type Cohort,
   type Course,
 } from "../crud/data";
+import { findEntityDefinition, getEntityDefinitions } from "../crud/entities";
 import {
   dashboardPath,
   getDefaultEntityKey,
   type RouteSearch,
 } from "../routing";
+import { OnboardingProvider, useOnboarding } from "../onboarding/OnboardingProvider";
+import { OnboardingChecklist } from "../onboarding/OnboardingChecklist";
+import {
+  resolveOnboardingPhase,
+  type OnboardingPhase,
+  type WorkspaceOnboardingFacts,
+} from "../onboarding/state";
 import { Button } from "./ui/button";
 import {
   useWorkspaceRouteState,
@@ -73,6 +84,8 @@ const text = {
   courses: "\u0627\u0644\u062F\u0648\u0631\u0627\u062A",
   profile: "\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A",
   settings: "\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A",
+  tutorial: "\u0627\u0644\u0634\u0631\u062D",
+  resetTutorial: "\u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0634\u0631\u062D",
   profileTitle: "\u0645\u0644\u0641 \u0627\u0644\u062D\u0633\u0627\u0628",
   profileBody:
     "\u062A\u0641\u0627\u0635\u064A\u0644 \u0627\u0644\u0647\u0648\u064A\u0629 \u0648\u0627\u0644\u062C\u0644\u0633\u0629 \u0648\u0635\u0644\u0627\u062D\u064A\u0629 \u0627\u0644\u0648\u0635\u0648\u0644.",
@@ -96,6 +109,20 @@ type HomeAction = {
   title: string;
   to: (courseSlug: string, cohortTag?: string) => string;
 };
+
+function createWorkspaceFacts(
+  overrides: Partial<WorkspaceOnboardingFacts> = {},
+): WorkspaceOnboardingFacts {
+  return {
+    attendanceRecordCount: 0,
+    courseCount: 0,
+    groupCount: 0,
+    hasSettingsAccess: true,
+    studentCount: 0,
+    teacherCount: 0,
+    ...overrides,
+  };
+}
 
 const authViewLocalization = {
   SIGN_IN: "\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644",
@@ -126,6 +153,9 @@ const authViewLocalization = {
     "\u0646\u0633\u064A\u062A \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631\u061F",
   FORGOT_PASSWORD_EMAIL:
     "\u062A\u062D\u0642\u0642 \u0645\u0646 \u0628\u0631\u064A\u062F\u0643 \u0644\u0631\u0627\u0628\u0637 \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u062A\u0639\u064A\u064A\u0646.",
+  NAME: "\u0627\u0644\u0627\u0633\u0645",
+  NAME_PLACEHOLDER: "\u0627\u0644\u0627\u0633\u0645",
+  GO_BACK: "\u0631\u062C\u0648\u0639",
   DONT_HAVE_AN_ACCOUNT: "\u0644\u064A\u0633 \u0644\u062F\u064A\u0643 \u062D\u0633\u0627\u0628\u061F",
   ALREADY_HAVE_AN_ACCOUNT: "\u0644\u062F\u064A\u0643 \u062D\u0633\u0627\u0628\u061F",
   REQUEST_FAILED: "\u062A\u0639\u0630\u0631 \u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u0637\u0644\u0628",
@@ -245,8 +275,15 @@ function UserSummary() {
   );
 }
 
-function AccountControls({ courseSlug }: { courseSlug: string }) {
+function AccountControls({
+  courseSlug,
+  tutorialPhase,
+}: {
+  courseSlug: string;
+  tutorialPhase: OnboardingPhase;
+}) {
   const { email, image, isSigningOut, name, signOut, signOutError } = useAuth();
+  const { openTour, resetOnboarding } = useOnboarding();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -284,6 +321,7 @@ function AccountControls({ courseSlug }: { courseSlug: string }) {
         aria-expanded={isOpen}
         aria-haspopup="menu"
         className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-sm transition hover:border-cedar/30 hover:bg-cedar/5"
+        data-onboarding="account-menu"
         onClick={() => setIsOpen((current) => !current)}
         type="button"
       >
@@ -378,6 +416,30 @@ function AccountControls({ courseSlug }: { courseSlug: string }) {
           >
             <span>{text.settings}</span>
             <Settings2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
+            onClick={() => {
+              setIsOpen(false);
+              openTour(tutorialPhase);
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>{text.tutorial}</span>
+            <HelpCircle className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
+            onClick={() => {
+              setIsOpen(false);
+              resetOnboarding();
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>{text.resetTutorial}</span>
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
           </button>
           <button
             className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar disabled:opacity-60"
@@ -509,10 +571,12 @@ export function AuthPanel({ appName }: { appName: string }) {
 
       <SignedIn>
         <section className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
-          <SignedInWorkspace
-            key={sessionId ?? "signed-in"}
-            routeState={routeState}
-          />
+          <OnboardingProvider>
+            <SignedInWorkspace
+              key={sessionId ?? "signed-in"}
+              routeState={routeState}
+            />
+          </OnboardingProvider>
         </section>
       </SignedIn>
     </>
@@ -530,6 +594,9 @@ function SignedInWorkspace({
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
+  const [workspaceFacts, setWorkspaceFacts] = useState<WorkspaceOnboardingFacts>(
+    () => createWorkspaceFacts(),
+  );
   const selectedCourse =
     courses.find((course) => course.slug === routeState.courseSlug) ?? null;
   const activeCohort =
@@ -547,10 +614,15 @@ function SignedInWorkspace({
     activeCourse ??
     courses[0] ??
     null;
-  const topAccessory = (
-    <AccountControls courseSlug={activeCourse?.slug ?? routeState.courseSlug} />
-  );
   const defaultEntity = getDefaultEntityKey(appSchema);
+  const entityDefinitions = getEntityDefinitions(appSchema);
+  const tutorialPhase = resolveOnboardingPhase(workspaceFacts);
+  const topAccessory = (
+    <AccountControls
+      courseSlug={activeCourse?.slug ?? routeState.courseSlug}
+      tutorialPhase={tutorialPhase}
+    />
+  );
 
   async function refreshCourses() {
     setIsLoadingCourses(true);
@@ -572,8 +644,66 @@ function SignedInWorkspace({
       return;
     }
 
-    const nextCohorts = await listCohorts(course.id);
-    setCohorts(nextCohorts);
+    try {
+      const nextCohorts = await listCohorts(course.id);
+      setCohorts(nextCohorts);
+    } catch {
+      setCohorts([]);
+    }
+  }
+
+  async function refreshWorkspaceFacts(course: Course | null) {
+    if (!course) {
+      setWorkspaceFacts(
+        createWorkspaceFacts({
+          courseCount: courses.length,
+        }),
+      );
+      return;
+    }
+
+    const studentsEntity = findEntityDefinition(
+      `${appSchema}.students`,
+      entityDefinitions,
+    );
+    const groupsEntity = findEntityDefinition(
+      `${appSchema}.groups`,
+      entityDefinitions,
+    );
+    const teachersEntity = findEntityDefinition(
+      `${appSchema}.teachers`,
+      entityDefinitions,
+    );
+    const attendanceEntity = findEntityDefinition(
+      `${appSchema}.attendanceRecords`,
+      entityDefinitions,
+    );
+
+    if (!studentsEntity || !groupsEntity || !teachersEntity || !attendanceEntity) {
+      setWorkspaceFacts(createWorkspaceFacts({ courseCount: courses.length }));
+      return;
+    }
+
+    try {
+      const [students, groups, teachers, attendanceRecords] = await Promise.all([
+        listRows(studentsEntity, course, activeCohort ?? undefined),
+        listRows(groupsEntity, course, activeCohort ?? undefined),
+        listRows(teachersEntity, course, activeCohort ?? undefined),
+        listRows(attendanceEntity, course, activeCohort ?? undefined),
+      ]);
+
+      setWorkspaceFacts(
+        createWorkspaceFacts({
+          attendanceRecordCount: attendanceRecords.length,
+          courseCount: courses.length,
+          groupCount: groups.length,
+          studentCount: students.length,
+          teacherCount: teachers.length,
+        }),
+      );
+    } catch {
+      setWorkspaceFacts(createWorkspaceFacts({ courseCount: courses.length }));
+    }
   }
 
   useEffect(() => {
@@ -583,6 +713,10 @@ function SignedInWorkspace({
   useEffect(() => {
     void refreshCohorts(activeCourse);
   }, [activeCourse?.id]);
+
+  useEffect(() => {
+    void refreshWorkspaceFacts(activeCourse);
+  }, [activeCohort?.id, activeCourse?.id, courses.length]);
 
   useEffect(() => {
     if (activeCourse?.slug) {
@@ -790,6 +924,7 @@ function SignedInWorkspace({
     return (
       <>
         <div className="relative z-50 flex justify-end">{topAccessory}</div>
+        <OnboardingChecklist facts={workspaceFacts} />
         <section className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-6">
           <h1 className="text-2xl font-bold text-ink sm:text-3xl">
             {"\u0648\u062C\u0647\u062A\u0643 \u0627\u0644\u0630\u0643\u064A\u0629"}
@@ -797,7 +932,10 @@ function SignedInWorkspace({
           <p className="mt-2 text-sm leading-7 text-slate-600">
             {"\u0627\u062E\u062A\u0631 \u0627\u0644\u062F\u0648\u0631\u0629 \u0623\u0648\u0644\u0627\u064B \u062B\u0645 \u0627\u0646\u062A\u0642\u0644 \u0645\u0628\u0627\u0634\u0631\u0629 \u0625\u0644\u0649 \u0627\u0644\u0635\u0641\u062D\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629."}
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div
+            className="mt-4 flex flex-wrap items-center gap-2"
+            data-onboarding="home-course-selector"
+          >
             {courses.map((course) => (
               <Button
                 className="rounded-full"
@@ -809,10 +947,22 @@ function SignedInWorkspace({
               </Button>
             ))}
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            data-onboarding="home-actions"
+          >
             {homeActions.map((action) => (
               <button
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-cedar/30 hover:bg-cedar/5 disabled:cursor-not-allowed disabled:opacity-60"
+                data-onboarding={
+                  action.id === "dashboard-main"
+                    ? "home-dashboard-action"
+                    : action.id === "attendance-take"
+                      ? "home-attendance-action"
+                      : action.id === "attendance-charts"
+                        ? "home-charts-action"
+                        : undefined
+                }
                 disabled={action.requiresCourse && !homeCourse}
                 key={action.id}
                 onClick={() => {
@@ -837,6 +987,7 @@ function SignedInWorkspace({
           </div>
           <div className="mt-5">
             <Button
+              data-onboarding="home-dashboard-action"
               onClick={() => {
                 void navigate({
                   to: dashboardPath({
