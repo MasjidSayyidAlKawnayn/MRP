@@ -1,19 +1,23 @@
-import {
+﻿import {
   useEffect,
   useMemo,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
 import {
   BookOpen,
   CalendarCheck,
   CheckCircle2,
   Clock3,
+  BarChart3,
   Database,
   Eye,
+  FileUp,
   FileText,
   GraduationCap,
   Layers3,
@@ -80,6 +84,12 @@ import {
   triggerBlobDownload,
   type AttendanceChartData,
 } from "../crud/attendanceCharts";
+import {
+  importAttendanceData,
+  parseAttendanceImportFile,
+  type AttendanceImportResult,
+  type ParsedAttendanceImport,
+} from "../crud/importAttendance";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -88,6 +98,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { Sheet, SheetContent } from "./ui/sheet";
 import { Select } from "./ui/select";
 import {
   cleanSearch,
@@ -100,95 +111,15 @@ import {
   type RouteSearch,
   type ViewMode,
 } from "../routing";
+import {
+  searchRows,
+} from "../features/dashboard/utils/search";
+import {
+  getDateDaysAgoString,
+  getTodayDateString,
+} from "../features/dashboard/utils/date";
 
 type RelationOptions = Partial<Record<EntityId, CrudRow[]>>;
-
-const ARABIC_DIACRITICS = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
-const TATWEEL = /\u0640/g;
-
-function normalizeSearchText(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(ARABIC_DIACRITICS, "")
-    .replace(TATWEEL, "")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ؤ/g, "و")
-    .replace(/ئ/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/\s+/g, " ");
-}
-
-function getEditDistanceWithinLimit(
-  left: string,
-  right: string,
-  maxDistance: number,
-) {
-  if (Math.abs(left.length - right.length) > maxDistance) {
-    return maxDistance + 1;
-  }
-
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    const current = [leftIndex];
-    let rowMinimum = current[0];
-
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
-      const substitutionCost =
-        left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
-      const distance = Math.min(
-        previous[rightIndex] + 1,
-        current[rightIndex - 1] + 1,
-        previous[rightIndex - 1] + substitutionCost,
-      );
-
-      current[rightIndex] = distance;
-      rowMinimum = Math.min(rowMinimum, distance);
-    }
-
-    if (rowMinimum > maxDistance) {
-      return maxDistance + 1;
-    }
-
-    previous = current;
-  }
-
-  return previous[right.length];
-}
-
-function getAllowedFuzzyDistance(term: string) {
-  if (term.length <= 2) {
-    return 0;
-  }
-
-  if (term.length <= 5) {
-    return 1;
-  }
-
-  return 2;
-}
-
-function searchTermMatchesText(term: string, text: string) {
-  if (text.includes(term)) {
-    return true;
-  }
-
-  const maxDistance = getAllowedFuzzyDistance(term);
-
-  if (maxDistance === 0) {
-    return false;
-  }
-
-  return text
-    .split(" ")
-    .some(
-      (word) =>
-        Math.abs(word.length - term.length) <= maxDistance &&
-        getEditDistanceWithinLimit(term, word, maxDistance) <= maxDistance,
-    );
-}
 
 const groupColorClasses = {
   rose: {
@@ -369,20 +300,6 @@ function toInputValue(value: CrudValue, field: FieldDefinition) {
   return String(value);
 }
 
-function getTodayDateString() {
-  const now = new Date();
-  const offsetDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
-  return offsetDate.toISOString().slice(0, 10);
-}
-
-function getDateDaysAgoString(days: number) {
-  const now = new Date();
-  const target = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-  const offsetDate = new Date(
-    target.getTime() - target.getTimezoneOffset() * 60_000,
-  );
-  return offsetDate.toISOString().slice(0, 10);
-}
 
 function getInitialFormValue(
   entity: EntityDefinition,
@@ -523,22 +440,6 @@ function getStatusClasses(status: CrudValue | undefined) {
     : "border-emerald-200 bg-emerald-50 text-emerald-800";
 }
 
-function searchRows<T extends CrudRow>(rows: T[], term: string, getText: (row: T) => string) {
-  const normalizedSearch = normalizeSearchText(term);
-
-  if (!normalizedSearch) {
-    return rows;
-  }
-
-  const terms = normalizedSearch.split(" ");
-  return rows.filter((row) => {
-    const searchableText = normalizeSearchText(getText(row));
-    return terms.every((searchTerm) =>
-      searchTermMatchesText(searchTerm, searchableText),
-    );
-  });
-}
-
 function getEntityByKey(
   entityDefinitions: EntityDefinition[],
   schema: SchemaName,
@@ -550,6 +451,21 @@ function getEntityByKey(
 function getNumberValue(value: CrudValue | undefined) {
   const numberValue = Number(value ?? 0);
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function toReadableLoadError(error: unknown) {
+  const fallback = ui.loadError;
+
+  if (!(error instanceof Error) || !error.message) {
+    return fallback;
+  }
+
+  const lowerMessage = error.message.toLowerCase();
+  if (lowerMessage.includes("permission denied")) {
+    return "لا تملك صلاحية الوصول إلى هذه البيانات. تواصل مع مدير النظام لتحديث الصلاحيات.";
+  }
+
+  return error.message;
 }
 
 function getStudentStats(
@@ -666,6 +582,8 @@ function EntityNav({
   onClose,
   onSelect,
   onSelectAttendanceTaking,
+  onSelectAttendanceCharts,
+  showAttendanceChartsActive,
 }: {
   activeEntityId: EntityId;
   activeSchema: SchemaName;
@@ -674,56 +592,50 @@ function EntityNav({
   onClose: () => void;
   onSelect: (entityId: EntityId) => void;
   onSelectAttendanceTaking: () => void;
+  onSelectAttendanceCharts: () => void;
+  showAttendanceChartsActive: boolean;
 }) {
-  return (
-    <aside
-      className={`fixed inset-y-0 right-0 z-[80] w-72 max-w-[82vw] overflow-y-auto border-l border-white/70 bg-white/95 p-4 shadow-2xl shadow-slate-900/20 backdrop-blur transition-transform duration-200 xl:translate-x-0 xl:pt-0 ${
-        isOpen ? "translate-x-0" : "translate-x-full"
-      }`}
-    >
+  const navItems = entityDefinitions.filter((entity) => entity.showInNav !== false);
+
+  const navContent = (
+    <>
       <div className="flex items-center justify-between gap-3">
         <h2 className="px-1 text-sm font-bold text-slate-500">{ui.crudPages}</h2>
-        <button
-          aria-label={ui.cancel}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 xl:hidden"
-          onClick={onClose}
-          title={ui.cancel}
-          type="button"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
       </div>
       <div className="mt-4 grid max-w-full gap-2">
-        {entityDefinitions
-          .filter((entity) => entity.showInNav !== false)
-          .map((entity) => {
-            const Icon = entityIcons[getEntityKey(entity.id)] ?? Database;
+        {navItems.map((entity) => {
+          const Icon = entityIcons[getEntityKey(entity.id)] ?? Database;
 
-            return (
-              <div className="grid gap-1" key={entity.id}>
-              <button
-                className={`flex min-h-14 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
-                  entity.id === activeEntityId
-                    ? "bg-cedar text-white shadow-lg shadow-cedar/25"
-                    : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
-                }`}
-                onClick={() => {
-                  onSelect(entity.id);
-                  onClose();
-                }}
-                type="button"
-              >
-                <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block truncate">{entity.label}</span>
-                  <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
-                    {entity.singularLabel}
-                  </span>
+          return (
+            <div className="grid gap-1" key={entity.id}>
+            <button
+              className={`flex min-h-14 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
+                entity.id === activeEntityId
+                  ? "bg-cedar text-white shadow-lg shadow-cedar/25"
+                  : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
+              }`}
+              onClick={() => {
+                onSelect(entity.id);
+                onClose();
+              }}
+              type="button"
+            >
+              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block truncate">{entity.label}</span>
+                <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                  {entity.description}
                 </span>
-              </button>
-              {entity.id === `${activeSchema}.attendanceRecords` ? (
+              </span>
+            </button>
+            {entity.id === `${activeSchema}.attendanceRecords` ? (
+              <>
                 <button
-                  className="mr-8 flex min-h-12 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold text-slate-600 transition hover:bg-cedar/5 hover:text-cedar"
+                  className={`mr-8 flex min-h-12 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
+                    !showAttendanceChartsActive
+                      ? "bg-cedar/10 text-cedar"
+                      : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
+                  }`}
                   onClick={() => {
                     onSelectAttendanceTaking();
                     onClose();
@@ -734,16 +646,67 @@ function EntityNav({
                   <span className="min-w-0">
                     <span className="block truncate">تسجيل الحضور</span>
                     <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
-                      صفحة مستقلة
+                      تسجيل سريع للحضور والتأخر حسب المجموعة
                     </span>
                   </span>
                 </button>
-              ) : null}
-              </div>
-            );
-          })}
+                <button
+                  className={`mr-8 flex min-h-12 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
+                    showAttendanceChartsActive
+                      ? "bg-cedar/10 text-cedar"
+                      : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
+                  }`}
+                  onClick={() => {
+                    onSelectAttendanceCharts();
+                    onClose();
+                  }}
+                  type="button"
+                >
+                  <BarChart3 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate">مخططات الحضور</span>
+                    <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                      رسوم توضح نسب الحضور والتأخر عبر الجلسات
+                    </span>
+                  </span>
+                </button>
+              </>
+            ) : null}
+          </div>
+          );
+        })}
       </div>
-    </aside>
+    </>
+  );
+
+  const desktopNav =
+    typeof document === "undefined"
+      ? null
+      : createPortal(
+          <aside className="fixed right-0 top-0 z-[80] hidden h-screen w-72 overflow-y-auto border-l border-white/70 bg-white/95 p-4 pt-6 shadow-2xl shadow-slate-900/20 backdrop-blur xl:block">
+            {navContent}
+          </aside>,
+          document.body,
+        );
+
+  return (
+    <>
+      {desktopNav}
+      <div className="xl:hidden">
+        <Sheet
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              onClose();
+            }
+          }}
+          open={isOpen}
+        >
+          <SheetContent className="w-72 max-w-[82vw] overflow-y-auto p-4 pt-20" side="right">
+            {navContent}
+          </SheetContent>
+        </Sheet>
+      </div>
+    </>
   );
 }
 
@@ -995,10 +958,10 @@ function DetailView({
       {studentStats ? (
         <div className="mt-5 grid gap-3 md:grid-cols-4">
           {[
-            ["صفحات الحفظ", studentStats.memorizedPages],
-            ["نقاط الحفظ", studentStats.pagePoints],
-            ["النقاط اليدوية", studentStats.manualPoints],
-            ["المجموع", studentStats.totalPoints],
+            ["طµظپط­ط§طھ ط§ظ„ط­ظپط¸", studentStats.memorizedPages],
+            ["ظ†ظ‚ط§ط· ط§ظ„ط­ظپط¸", studentStats.pagePoints],
+            ["ط§ظ„ظ†ظ‚ط§ط· ط§ظ„ظٹط¯ظˆظٹط©", studentStats.manualPoints],
+            ["ط§ظ„ظ…ط¬ظ…ظˆط¹", studentStats.totalPoints],
           ].map(([label, value]) => (
             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={label}>
               <p className="text-xs font-bold text-slate-500">{label}</p>
@@ -1006,21 +969,21 @@ function DetailView({
             </div>
           ))}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
-            <p className="text-sm font-bold text-ink">آخر صفحات الحفظ</p>
+            <p className="text-sm font-bold text-ink">ط¢ط®ط± طµظپط­ط§طھ ط§ظ„ط­ظپط¸</p>
             <div className="mt-3 space-y-2 text-sm text-slate-700">
               {recentPages.length ? recentPages.map((page) => (
                 <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(page.id)}>
-                  صفحة {formatValue(page.page)} · {formatValue(page.memorizedOn)}
+                  طµظپط­ط© {formatValue(page.page)} آ· {formatValue(page.memorizedOn)}
                 </p>
               )) : <p className="text-slate-500">{ui.noRecords}</p>}
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
-            <p className="text-sm font-bold text-ink">آخر حركات النقاط</p>
+            <p className="text-sm font-bold text-ink">ط¢ط®ط± ط­ط±ظƒط§طھ ط§ظ„ظ†ظ‚ط§ط·</p>
             <div className="mt-3 space-y-2 text-sm text-slate-700">
               {recentManualTransactions.length ? recentManualTransactions.map((transaction) => (
                 <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(transaction.id)}>
-                  {formatValue(transaction.amount)} · {formatValue(transaction.reason)}
+                  {formatValue(transaction.amount)} آ· {formatValue(transaction.reason)}
                 </p>
               )) : <p className="text-slate-500">{ui.noRecords}</p>}
             </div>
@@ -1927,7 +1890,7 @@ function AdminUsersSettings() {
     try {
       setAdmins(await listAdminUsers());
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : ui.loadError);
+      setError(toReadableLoadError(caughtError));
     } finally {
       setIsLoading(false);
     }
@@ -1942,7 +1905,7 @@ function AdminUsersSettings() {
     setError(null);
 
     if (!draft.userId.trim()) {
-      setError("أدخل معرف المستخدم.");
+      setError("ط£ط¯ط®ظ„ ظ…ط¹ط±ظپ ط§ظ„ظ…ط³طھط®ط¯ظ….");
       return;
     }
 
@@ -1990,9 +1953,9 @@ function AdminUsersSettings() {
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-ink">إدارة المستخدمين والصلاحيات</p>
+          <p className="text-sm font-bold text-ink">ط¥ط¯ط§ط±ط© ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ</p>
           <p className="mt-1 text-xs leading-6 text-slate-500">
-            المستخدم المالك يستطيع إدارة المستخدمين والصلاحيات وله وصول كامل لكل البيانات.
+            ط§ظ„ظ…ط³طھط®ط¯ظ… ط§ظ„ظ…ط§ظ„ظƒ ظٹط³طھط·ظٹط¹ ط¥ط¯ط§ط±ط© ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ ظˆظ„ظ‡ ظˆطµظˆظ„ ظƒط§ظ…ظ„ ظ„ظƒظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ.
           </p>
         </div>
         <ShieldCheck className="h-5 w-5 text-cedar" aria-hidden="true" />
@@ -2028,7 +1991,7 @@ function AdminUsersSettings() {
                 placeholder="email@example.com"
               />
               <label className="inline-flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700">
-                <span>مالك</span>
+                <span>ظ…ط§ظ„ظƒ</span>
                 <input
                   checked={admin.owner}
                   className="h-4 w-4 accent-cedar"
@@ -2069,7 +2032,7 @@ function AdminUsersSettings() {
           value={draft.email}
         />
         <label className="inline-flex h-11 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
-          <span>مالك</span>
+          <span>ظ…ط§ظ„ظƒ</span>
           <input
             checked={draft.owner}
             className="h-4 w-4 accent-cedar"
@@ -2123,7 +2086,7 @@ function PageTierSettings({
     const maxPages = draft.maxPages ? Number(draft.maxPages) : null;
     const points = Number(draft.points);
     if (!Number.isInteger(minPages) || !Number.isInteger(points) || minPages < 1 || (maxPages !== null && (!Number.isInteger(maxPages) || maxPages < minPages))) {
-      setError("أدخل شريحة صحيحة.");
+      setError("ط£ط¯ط®ظ„ ط´ط±ظٹط­ط© طµط­ظٹط­ط©.");
       return;
     }
     await createRow(tierEntity, {
@@ -2156,8 +2119,8 @@ function PageTierSettings({
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-ink">شرائح نقاط الحفظ</p>
-          <p className="mt-1 text-xs text-slate-500">تطبق على الصفحات الجديدة المحفوظة في الدفعة الواحدة.</p>
+          <p className="text-sm font-bold text-ink">ط´ط±ط§ط¦ط­ ظ†ظ‚ط§ط· ط§ظ„ط­ظپط¸</p>
+          <p className="mt-1 text-xs text-slate-500">طھط·ط¨ظ‚ ط¹ظ„ظ‰ ط§ظ„طµظپط­ط§طھ ط§ظ„ط¬ط¯ظٹط¯ط© ط§ظ„ظ…ط­ظپظˆط¸ط© ظپظٹ ط§ظ„ط¯ظپط¹ط© ط§ظ„ظˆط§ط­ط¯ط©.</p>
         </div>
         <SlidersHorizontal className="h-5 w-5 text-cedar" aria-hidden="true" />
       </div>
@@ -2167,18 +2130,18 @@ function PageTierSettings({
           <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-5 md:items-center" key={String(tier.id)}>
             <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "name", event.target.value)} defaultValue={String(tier.name ?? "")} />
             <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "minPages", Number(event.target.value))} defaultValue={String(tier.minPages ?? "")} type="number" min={1} />
-            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "maxPages", event.target.value ? Number(event.target.value) : null)} defaultValue={tier.maxPages === null ? "" : String(tier.maxPages ?? "")} type="number" min={1} placeholder="بلا حد" />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "maxPages", event.target.value ? Number(event.target.value) : null)} defaultValue={tier.maxPages === null ? "" : String(tier.maxPages ?? "")} type="number" min={1} placeholder="ط¨ظ„ط§ ط­ط¯" />
             <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "points", Number(event.target.value))} defaultValue={String(tier.points ?? "")} type="number" />
             <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleDeleteTier(tier)} />
           </div>
         ))}
       </div>
       <form className="mt-4 grid gap-3 md:grid-cols-[repeat(4,minmax(0,1fr))_auto] md:items-end" onSubmit={handleAddTier}>
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="اسم الشريحة" value={draft.name} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="ط§ط³ظ… ط§ظ„ط´ط±ظٹط­ط©" value={draft.name} />
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, minPages: event.target.value }))} type="number" value={draft.minPages} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="بلا حد" type="number" value={draft.maxPages} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="ط¨ظ„ط§ ط­ط¯" type="number" value={draft.maxPages} />
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, points: event.target.value }))} type="number" value={draft.points} />
-        <button className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl bg-cedar px-3 text-sm font-bold text-white md:w-auto" type="submit">إضافة شريحة</button>
+        <button className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl bg-cedar px-3 text-sm font-bold text-white md:w-auto" type="submit">ط¥ط¶ط§ظپط© ط´ط±ظٹط­ط©</button>
       </form>
     </div>
   );
@@ -2236,23 +2199,23 @@ function PointsWorkspace({
       <div className="space-y-3 border-b border-slate-200/80 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
-            <h2 className="mt-1 text-2xl font-bold text-ink">ترتيب الطلاب والحفظ</h2>
+            <p className="text-sm font-bold text-cedar">ظ„ظˆط­ط© ط§ظ„ظ†ظ‚ط§ط·</p>
+            <h2 className="mt-1 text-2xl font-bold text-ink">طھط±طھظٹط¨ ط§ظ„ط·ظ„ط§ط¨ ظˆط§ظ„ط­ظپط¸</h2>
           </div>
           <div className="grid gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center">
             <select className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setRankMode(event.target.value as typeof rankMode)} value={rankMode}>
-              <option value="points">حسب مجموع النقاط</option>
-              <option value="pages">حسب صفحات الحفظ</option>
-              <option value="recent">حسب النشاط ضمن الفترة</option>
+              <option value="points">ط­ط³ط¨ ظ…ط¬ظ…ظˆط¹ ط§ظ„ظ†ظ‚ط§ط·</option>
+              <option value="pages">ط­ط³ط¨ طµظپط­ط§طھ ط§ظ„ط­ظپط¸</option>
+              <option value="recent">ط­ط³ط¨ ط§ظ„ظ†ط´ط§ط· ط¶ظ…ظ† ط§ظ„ظپطھط±ط©</option>
             </select>
             <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
             <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
-            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="بحث عن طالب" value={search} />
+            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="ط¨ط­ط« ط¹ظ† ط·ط§ظ„ط¨" value={search} />
             <button
-              aria-label="إضافة نقاط يدوية"
+              aria-label="ط¥ط¶ط§ظپط© ظ†ظ‚ط§ط· ظٹط¯ظˆظٹط©"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
               onClick={onOpenManualPoints}
-              title="إضافة نقاط يدوية"
+              title="ط¥ط¶ط§ظپط© ظ†ظ‚ط§ط· ظٹط¯ظˆظٹط©"
               type="button"
             >
               <Plus className="h-5 w-5" aria-hidden="true" />
@@ -2264,7 +2227,7 @@ function PointsWorkspace({
         <table className="w-full divide-y divide-slate-200 text-right text-sm">
           <thead className="bg-mist/70">
             <tr>
-              {["الترتيب", "الطالب", "المجموعة", "الصفحات", "نقاط الحفظ", "يدوي", "المجموع", "الفترة", ""].map((label) => (
+              {["ط§ظ„طھط±طھظٹط¨", "ط§ظ„ط·ط§ظ„ط¨", "ط§ظ„ظ…ط¬ظ…ظˆط¹ط©", "ط§ظ„طµظپط­ط§طھ", "ظ†ظ‚ط§ط· ط§ظ„ط­ظپط¸", "ظٹط¯ظˆظٹ", "ط§ظ„ظ…ط¬ظ…ظˆط¹", "ط§ظ„ظپطھط±ط©", ""].map((label) => (
                 <th className="px-3 py-2 font-bold text-slate-600" key={label}>{label}</th>
               ))}
             </tr>
@@ -2335,7 +2298,7 @@ function ManualPointsPage({
     const parsedAmount = Number(amount);
 
     if (!manualEntity || !studentId || !Number.isInteger(parsedAmount) || !reason.trim()) {
-      setError("اختر الطالب وأدخل مقدار النقاط والسبب.");
+      setError("ط§ط®طھط± ط§ظ„ط·ط§ظ„ط¨ ظˆط£ط¯ط®ظ„ ظ…ظ‚ط¯ط§ط± ط§ظ„ظ†ظ‚ط§ط· ظˆط§ظ„ط³ط¨ط¨.");
       return;
     }
 
@@ -2362,8 +2325,8 @@ function ManualPointsPage({
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
       <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-4">
         <div>
-          <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
-          <h2 className="mt-1 text-2xl font-bold text-ink">إضافة نقاط يدوية</h2>
+          <p className="text-sm font-bold text-cedar">ظ„ظˆط­ط© ط§ظ„ظ†ظ‚ط§ط·</p>
+          <h2 className="mt-1 text-2xl font-bold text-ink">ط¥ط¶ط§ظپط© ظ†ظ‚ط§ط· ظٹط¯ظˆظٹط©</h2>
         </div>
         <button
           aria-label={ui.cancel}
@@ -2384,8 +2347,8 @@ function ManualPointsPage({
           ))}
         </select>
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setTransactionDate(event.target.value)} type="date" value={transactionDate} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setAmount(event.target.value)} placeholder="نقاط + أو -" type="number" value={amount} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="السبب" value={reason} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setAmount(event.target.value)} placeholder="ظ†ظ‚ط§ط· + ط£ظˆ -" type="number" value={amount} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="ط§ظ„ط³ط¨ط¨" value={reason} />
         {error ? <p className="order-last rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-5">{error}</p> : null}
         <button
           className="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 md:w-auto"
@@ -2393,7 +2356,7 @@ function ManualPointsPage({
           type="submit"
         >
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-          <span>{isSaving ? ui.saving : "إضافة حركة"}</span>
+          <span>{isSaving ? ui.saving : "ط¥ط¶ط§ظپط© ط­ط±ظƒط©"}</span>
         </button>
       </form>
     </div>
@@ -2440,7 +2403,7 @@ function MemorizationWorkspace({
     const normalizedEnd = Math.max(firstPage, lastPage);
 
     if (!pagesEntity || !awardsEntity || !studentId || !Number.isInteger(firstPage) || !Number.isInteger(lastPage) || normalizedStart < 1 || normalizedEnd > 604) {
-      setError("أدخل طالبا وصفحة أو نطاقا صحيحا بين 1 و604.");
+      setError("ط£ط¯ط®ظ„ ط·ط§ظ„ط¨ط§ ظˆطµظپط­ط© ط£ظˆ ظ†ط·ط§ظ‚ط§ طµط­ظٹط­ط§ ط¨ظٹظ† 1 ظˆ604.");
       return;
     }
 
@@ -2450,7 +2413,7 @@ function MemorizationWorkspace({
     );
 
     if (duplicatePages.length) {
-      setError(`هذه الصفحات مسجلة مسبقا لهذا الطالب: ${duplicatePages.join(", ")}`);
+      setError(`ظ‡ط°ظ‡ ط§ظ„طµظپط­ط§طھ ظ…ط³ط¬ظ„ط© ظ…ط³ط¨ظ‚ط§ ظ„ظ‡ط°ط§ ط§ظ„ط·ط§ظ„ط¨: ${duplicatePages.join(", ")}`);
       return;
     }
 
@@ -2507,7 +2470,7 @@ function MemorizationWorkspace({
       <form className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5" onSubmit={handleSubmit}>
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-end">
           <label className="text-sm font-bold text-slate-700">
-            الطالب
+            ط§ظ„ط·ط§ظ„ط¨
             <select className={inputClass} onChange={(event) => setStudentId(event.target.value)} value={studentId}>
               {students.map((student) => (
                 <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
@@ -2515,20 +2478,20 @@ function MemorizationWorkspace({
             </select>
           </label>
           <label className="text-sm font-bold text-slate-700">
-            من صفحة
+            ظ…ظ† طµظپط­ط©
             <input className={inputClass} min={1} max={604} onChange={(event) => setFromPage(event.target.value)} type="number" value={fromPage} />
           </label>
           <label className="text-sm font-bold text-slate-700">
-            إلى صفحة
-            <input className={inputClass} min={1} max={604} onChange={(event) => setToPage(event.target.value)} placeholder="اختياري" type="number" value={toPage} />
+            ط¥ظ„ظ‰ طµظپط­ط©
+            <input className={inputClass} min={1} max={604} onChange={(event) => setToPage(event.target.value)} placeholder="ط§ط®طھظٹط§ط±ظٹ" type="number" value={toPage} />
           </label>
           <label className="text-sm font-bold text-slate-700">
-            التاريخ
+            ط§ظ„طھط§ط±ظٹط®
             <input className={inputClass} onChange={(event) => setMemorizedOn(event.target.value)} type="date" value={memorizedOn} />
           </label>
           <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cedar px-4 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60" disabled={isSaving} type="submit">
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            حفظ
+            ط­ظپط¸
           </button>
         </div>
         {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
@@ -2542,6 +2505,7 @@ type AttendanceWorkspaceMode = "student" | "group" | "taking" | "records";
 function AttendanceWorkspace({
   activeSchema,
   attendanceEntity,
+  isChartsPage,
   isLoading,
   isTakingPage,
   onMarkAttendance,
@@ -2554,6 +2518,7 @@ function AttendanceWorkspace({
 }: {
   activeSchema: SchemaName;
   attendanceEntity: EntityDefinition;
+  isChartsPage: boolean;
   isLoading: boolean;
   isTakingPage: boolean;
   onMarkAttendance: (
@@ -2570,7 +2535,7 @@ function AttendanceWorkspace({
   relationOptions: RelationOptions;
 }) {
   const [viewMode, setViewMode] = useState<AttendanceWorkspaceMode>(
-    isTakingPage ? "taking" : "student",
+    isTakingPage ? "taking" : isChartsPage ? "group" : "student",
   );
   const [studentSearch, setStudentSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
@@ -2602,8 +2567,8 @@ function AttendanceWorkspace({
       ] as const);
 
   useEffect(() => {
-    setViewMode(isTakingPage ? "taking" : "student");
-  }, [isTakingPage]);
+    setViewMode(isTakingPage ? "taking" : isChartsPage ? "group" : "student");
+  }, [isChartsPage, isTakingPage]);
 
   const selectedStudent =
     students.find((student) => String(student.id) === String(selectedStudentId)) ??
@@ -2900,7 +2865,7 @@ function AttendanceWorkspace({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-bold text-ink">{getStudentName(student)}</span>
                       <span className="mt-0.5 block truncate text-xs text-slate-500">
-                        #{formatValue(student.id)} · {formatValue(studentGroup?.name)}
+                        #{formatValue(student.id)} آ· {formatValue(studentGroup?.name)}
                       </span>
                     </span>
                   </button>
@@ -3383,7 +3348,7 @@ export function CrudDashboard({
     try {
       setRows(await listRows(entity, activeCourse, activeCohort ?? undefined));
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : ui.loadError);
+      setError(toReadableLoadError(caughtError));
     } finally {
       setIsLoading(false);
     }
@@ -3475,32 +3440,13 @@ export function CrudDashboard({
   }
 
   const filteredRows = useMemo(() => {
-    const normalizedSearch = normalizeSearchText(searchTerm);
-
-    if (!normalizedSearch) {
-      return rows;
-    }
-
-    const searchTerms = normalizedSearch.split(" ");
-
-    return rows.filter((row) => {
-      const searchableText = normalizeSearchText(
-        activeEntity.fields
-          .map((field) =>
-            formatFieldValue(
-              field,
-              row[field.key],
-              relationOptions,
-              entityDefinitions,
-            ),
-          )
-          .join(" "),
-      );
-
-      return searchTerms.every((term) =>
-        searchTermMatchesText(term, searchableText),
-      );
-    });
+    return searchRows(rows, searchTerm, (row) =>
+      activeEntity.fields
+        .map((field) =>
+          formatFieldValue(field, row[field.key], relationOptions, entityDefinitions),
+        )
+        .join(" "),
+    );
   }, [activeEntity, entityDefinitions, relationOptions, rows, searchTerm]);
 
   async function handleCreate(values: Record<string, CrudValue>) {
@@ -3627,7 +3573,7 @@ export function CrudDashboard({
 
   return (
     <div className="min-w-0 space-y-4 sm:space-y-6">
-      <div className="relative z-50 flex min-w-0 items-start justify-between gap-3 px-1">
+      <div className="relative z-50 flex min-w-0 items-start justify-between gap-3 px-1 xl:pr-80">
         <div className="flex min-w-0 items-start gap-2">
           <button
             aria-expanded={isSidebarOpen}
@@ -3646,17 +3592,19 @@ export function CrudDashboard({
             </h1>
           </div>
         </div>
-        <div className="shrink-0">{topAccessory}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          <AttendanceImportDialog
+            activeCohort={activeCohort}
+            activeCourse={activeCourse}
+            activeSchema={activeSchema}
+            onImported={async () => {
+              await refreshRows();
+              await refreshRelationOptions();
+            }}
+          />
+          {topAccessory}
+        </div>
       </div>
-
-      {isSidebarOpen ? (
-        <button
-          aria-label={ui.cancel}
-          className="fixed inset-0 z-[70] cursor-default bg-slate-950/30 backdrop-blur-[1px] xl:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-          type="button"
-        />
-      ) : null}
 
       <EntityNav
         activeEntityId={activeEntity.id}
@@ -3681,6 +3629,18 @@ export function CrudDashboard({
             search: {},
           });
         }}
+        onSelectAttendanceCharts={() => {
+          void navigate({
+            to: dashboardPath({
+              courseSlug: activeCourse.slug,
+              cohortTag: activeCohort?.tag,
+              entity: "attendanceRecords",
+              subpage: "charts",
+            }),
+            search: {},
+          });
+        }}
+        showAttendanceChartsActive={attendanceCharts}
       />
 
       <section className="min-w-0 space-y-4 sm:space-y-5 xl:pr-80 xl:pt-0">
@@ -3815,6 +3775,7 @@ export function CrudDashboard({
           <AttendanceWorkspace
             activeSchema={activeSchema}
             attendanceEntity={activeEntity}
+            isChartsPage={attendanceCharts}
             isTakingPage={attendanceTaking}
             isLoading={isLoading}
             onMarkAttendance={handleMarkAttendance}
@@ -3919,7 +3880,7 @@ export function CrudDashboard({
                   <tr>
                     {["groups", "students", "teachers"].includes(activeEntityKey) ? (
                       <th className="w-8 px-1.5 py-1 font-bold text-slate-600 sm:px-2">
-                        <span className="sr-only">لون المجموعة</span>
+                        <span className="sr-only">ظ„ظˆظ† ط§ظ„ظ…ط¬ظ…ظˆط¹ط©</span>
                       </th>
                     ) : null}
                     {activeEntity.listFields.map((key) => (
@@ -4060,6 +4021,179 @@ export function CrudDashboard({
   );
 }
 
+function AttendanceImportDialog({
+  activeCohort,
+  activeCourse,
+  activeSchema,
+  onImported,
+}: {
+  activeCohort?: Cohort | null;
+  activeCourse: Course;
+  activeSchema: SchemaName;
+  onImported: () => Promise<void>;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [parsed, setParsed] = useState<ParsedAttendanceImport | null>(null);
+  const [result, setResult] = useState<AttendanceImportResult | null>(null);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setError(null);
+    setParsed(null);
+    setResult(null);
+
+    if (!file) {
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      setParsed(await parseAttendanceImportFile(file));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر قراءة ملف الاستيراد.",
+      );
+    } finally {
+      setIsParsing(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleImport() {
+    if (!parsed) {
+      return;
+    }
+
+    setError(null);
+    setResult(null);
+    setIsImporting(true);
+    try {
+      const importResult = await importAttendanceData({
+        activeCohort,
+        activeCourse,
+        activeSchema,
+        parsed,
+      });
+      setResult(importResult);
+      await onImported();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر استيراد البيانات.",
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        aria-label="استيراد بيانات"
+        className="h-11 w-11 px-0 sm:w-auto sm:px-4"
+        onClick={() => setOpen(true)}
+        title="استيراد بيانات"
+      >
+        <FileUp className="h-5 w-5" aria-hidden="true" />
+        <span className="hidden sm:inline">استيراد</span>
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>استيراد بيانات الحضور</DialogTitle>
+            <DialogDescription>
+              ارفع ملف CSV أو XLSX من ملفات الحضور. سيتم ربط البيانات بالدورة الحالية.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-right">
+            <label className="block rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+              <span className="mb-2 block font-bold text-ink">ملف البيانات</span>
+              <input
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="block w-full text-sm"
+                disabled={isParsing || isImporting}
+                onChange={(event) => void handleFileChange(event)}
+                type="file"
+              />
+            </label>
+
+            {isParsing ? (
+              <p className="flex items-center gap-2 text-sm text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                جاري قراءة الملف...
+              </p>
+            ) : null}
+
+            {parsed ? (
+              <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:grid-cols-2">
+                <p>
+                  <span className="font-bold text-ink">الملف: </span>
+                  {parsed.fileName}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">الطلاب: </span>
+                  {parsed.students.length}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">المجموعات: </span>
+                  {parsed.groups.length}
+                </p>
+                <p>
+                  <span className="font-bold text-ink">جلسات الحضور: </span>
+                  {parsed.sessions.length}
+                </p>
+                <p className="sm:col-span-2">
+                  <span className="font-bold text-ink">سجلات الحضور: </span>
+                  {parsed.attendanceRecords.length}
+                </p>
+              </div>
+            ) : null}
+
+            {result ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                تم الاستيراد: {result.studentsCreated} طالب، {result.groupsCreated} مجموعة،{" "}
+                {result.sessionsCreated} جلسة، {result.attendanceRecordsCreated} سجل حضور جديد،{" "}
+                {result.attendanceRecordsUpdated} سجل محدث.
+              </div>
+            ) : null}
+
+            {error ? (
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={isImporting}
+                onClick={() => setOpen(false)}
+                variant="outline"
+              >
+                {ui.cancel}
+              </Button>
+              <Button disabled={!parsed || isImporting || isParsing} onClick={handleImport}>
+                {isImporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <FileUp className="h-4 w-4" aria-hidden="true" />
+                )}
+                <span>{isImporting ? "جاري الاستيراد..." : "استيراد البيانات"}</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function ActionButton({
   danger,
   icon: Icon,
@@ -4089,6 +4223,7 @@ function ActionButton({
     </button>
   );
 }
+
 
 
 

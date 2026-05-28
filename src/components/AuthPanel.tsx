@@ -6,10 +6,12 @@ import {
 import type { AuthLocalization } from "@neondatabase/neon-js/auth/react/ui";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
+  BarChart3,
   CheckCircle2,
   ChevronDown,
   Clock3,
   GraduationCap,
+  Home,
   KeyRound,
   LayoutDashboard,
   Layers3,
@@ -39,15 +41,16 @@ import {
   type Cohort,
   type Course,
 } from "../crud/data";
-import type { EntityKey } from "../crud/entities";
 import {
   dashboardPath,
   getDefaultEntityKey,
-  validateEntityKey,
   type RouteSearch,
-  type ViewMode,
-  type WorkspacePage,
 } from "../routing";
+import { Button } from "./ui/button";
+import {
+  useWorkspaceRouteState,
+  type WorkspaceRouteState,
+} from "../features/routing/useWorkspaceRouteState";
 
 const text = {
   loadingAccount: "\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u062D\u0633\u0627\u0628...",
@@ -82,6 +85,16 @@ const text = {
     "\u0623\u0646\u0634\u0626 \u062F\u0648\u0631\u0629 \u0645\u0646 \u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0642\u0628\u0644 \u0627\u0633\u062A\u062E\u062F\u0627\u0645 \u0627\u0644\u0645\u0646\u0635\u0629.",
   missingCoursesTable:
     "\u062C\u062F\u0648\u0644 \u0627\u0644\u062F\u0648\u0631\u0627\u062A \u063A\u064A\u0631 \u0645\u062A\u0627\u062D \u0641\u064A \u0645\u062E\u0637\u0637 \u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A. \u0634\u063A\u0644 sql/course_isolation.sql \u062B\u0645 \u0623\u0639\u062F \u062A\u062D\u0645\u064A\u0644 \u0645\u062E\u0637\u0637 PostgREST.",
+  home: "\u0627\u0644\u0631\u0626\u064A\u0633\u064A\u0629",
+};
+
+type HomeAction = {
+  description: string;
+  requiresCourse?: boolean;
+  icon: ReactNode;
+  id: string;
+  title: string;
+  to: (courseSlug: string, cohortTag?: string) => string;
 };
 
 const authViewLocalization = {
@@ -117,149 +130,6 @@ const authViewLocalization = {
   ALREADY_HAVE_AN_ACCOUNT: "\u0644\u062F\u064A\u0643 \u062D\u0633\u0627\u0628\u061F",
   REQUEST_FAILED: "\u062A\u0639\u0630\u0631 \u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u0637\u0644\u0628",
 };
-type WorkspaceRouteState = {
-  attendanceCharts?: boolean;
-  attendanceTaking?: boolean;
-  canonicalPath?: string;
-  cohortTag?: string;
-  entity: EntityKey;
-  manualPoints?: boolean;
-  mode: ViewMode;
-  page: WorkspacePage;
-  rowId?: string;
-  courseSlug: string;
-  search: RouteSearch;
-};
-
-function getWorkspaceRouteState(
-  pathname: string,
-  search: RouteSearch,
-): WorkspaceRouteState {
-  const parts = pathname.split("/").filter(Boolean);
-  const page = parts[0];
-  const defaultCourseSlug = "default";
-
-  if (page === "profile") {
-    return {
-      courseSlug: defaultCourseSlug,
-      entity: getDefaultEntityKey(appSchema),
-      mode: "list",
-      page: "profile",
-      search,
-    };
-  }
-
-  if (page === "settings") {
-    return {
-      courseSlug: defaultCourseSlug,
-      entity: getDefaultEntityKey(appSchema),
-      mode: "list",
-      page: "settings",
-      search,
-    };
-  }
-
-  if (page === "courses" && parts.length === 1) {
-    return {
-      courseSlug: defaultCourseSlug,
-      entity: getDefaultEntityKey(appSchema),
-      mode: "list",
-      page: "courses",
-      search,
-    };
-  }
-
-  if (page === "courses" && parts[1] === "new") {
-    return {
-      courseSlug: defaultCourseSlug,
-      entity: getDefaultEntityKey(appSchema),
-      mode: "create",
-      page: "courseCreate",
-      search,
-    };
-  }
-
-  const isCourseRoute = page === "courses" && parts[2] === "dashboard";
-  const isCohortRoute =
-    page === "courses" && parts[2] === "cohorts" && parts[4] === "dashboard";
-
-  if (page === "courses" && !isCourseRoute && !isCohortRoute) {
-    const courseSlug = parts[1] ?? defaultCourseSlug;
-    const pageMode = parts[2];
-
-    return {
-      courseSlug,
-      entity: getDefaultEntityKey(appSchema),
-      mode: pageMode === "edit" ? "edit" : "detail",
-      page:
-        pageMode === "edit"
-          ? "courseEdit"
-          : pageMode === "delete"
-            ? "courseDelete"
-            : "courseDetail",
-      search,
-    };
-  }
-
-  const courseSlug =
-    isCourseRoute || isCohortRoute
-      ? parts[1]
-      : parts[1] === "mqs"
-        ? "default"
-        : (parts[1] ?? defaultCourseSlug);
-  const cohortTag = isCohortRoute ? parts[3] : undefined;
-  const entityPart = isCohortRoute ? parts[5] : isCourseRoute ? parts[3] : parts[2];
-  const subpathIndex = isCohortRoute ? 6 : isCourseRoute ? 4 : 3;
-  const entity = validateEntityKey(appSchema, entityPart);
-  const attendanceTaking = entity === "attendanceRecords" && parts[subpathIndex] === "take";
-  const attendanceCharts =
-    entity === "attendanceRecords" && parts[subpathIndex] === "charts";
-  const manualPoints = entity === "points" && parts[subpathIndex] === "manual";
-  const rowId =
-    parts[subpathIndex] &&
-    parts[subpathIndex] !== "new" &&
-    !attendanceTaking &&
-    !attendanceCharts &&
-    !manualPoints
-      ? decodeURIComponent(parts[subpathIndex])
-      : undefined;
-  const mode: ViewMode =
-    parts[subpathIndex] === "new"
-      ? "create"
-      : parts[subpathIndex + 1] === "edit"
-        ? "edit"
-        : rowId
-          ? "detail"
-          : "list";
-
-  return {
-    canonicalPath: dashboardPath({
-      cohortTag,
-      courseSlug,
-      entity,
-      mode,
-      rowId,
-      subpage: attendanceTaking
-        ? "take"
-        : attendanceCharts
-          ? "charts"
-          : manualPoints
-            ? "manual"
-            : undefined,
-    }),
-    attendanceCharts,
-    attendanceTaking,
-    cohortTag,
-    entity,
-    manualPoints,
-    mode,
-    page: "dashboard",
-    rowId,
-    courseSlug,
-    search,
-  };
-}
-
 function InfoRow({
   icon,
   label,
@@ -448,6 +318,18 @@ function AccountControls({ courseSlug }: { courseSlug: string }) {
             className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
             onClick={() => {
               setIsOpen(false);
+              void navigate({ to: "/home" });
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>{text.home}</span>
+            <Home className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            className="mt-2 flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar"
+            onClick={() => {
+              setIsOpen(false);
               void navigate({
                 to: dashboardPath({
                   courseSlug,
@@ -523,10 +405,7 @@ export function AuthPanel({ appName }: { appName: string }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { sessionId } = useAuth();
-  const routeState = getWorkspaceRouteState(
-    location.pathname,
-    location.search as RouteSearch,
-  );
+  const routeState = useWorkspaceRouteState();
 
   useEffect(() => {
     if (
@@ -662,9 +541,16 @@ function SignedInWorkspace({
   ].includes(routeState.page);
   const activeCourse =
     isFocusedCoursePage ? selectedCourse : (selectedCourse ?? courses[0] ?? null);
+  const [homeCourseSlug, setHomeCourseSlug] = useState(activeCourse?.slug ?? "default");
+  const homeCourse =
+    courses.find((course) => course.slug === homeCourseSlug) ??
+    activeCourse ??
+    courses[0] ??
+    null;
   const topAccessory = (
     <AccountControls courseSlug={activeCourse?.slug ?? routeState.courseSlug} />
   );
+  const defaultEntity = getDefaultEntityKey(appSchema);
 
   async function refreshCourses() {
     setIsLoadingCourses(true);
@@ -697,6 +583,26 @@ function SignedInWorkspace({
   useEffect(() => {
     void refreshCohorts(activeCourse);
   }, [activeCourse?.id]);
+
+  useEffect(() => {
+    if (activeCourse?.slug) {
+      setHomeCourseSlug((current) =>
+        current === "default" || !courses.some((course) => course.slug === current)
+          ? activeCourse.slug
+          : current,
+      );
+      return;
+    }
+
+    if (!courses.length) {
+      setHomeCourseSlug("default");
+      return;
+    }
+
+    setHomeCourseSlug((current) =>
+      courses.some((course) => course.slug === current) ? current : courses[0].slug,
+    );
+  }, [activeCourse?.slug, courses]);
 
   useEffect(() => {
     if (
@@ -811,6 +717,141 @@ function SignedInWorkspace({
             })
           }
         />
+      </>
+    );
+  }
+
+  if (routeState.page === "home") {
+    const homeActions: HomeAction[] = [
+      {
+        description: "\u0628\u062F\u0621 \u0627\u0644\u0639\u0645\u0644 \u0628\u0646\u0638\u0631\u0629 \u0639\u0627\u0645\u0629 \u0639\u0644\u0649 \u0623\u0642\u0633\u0627\u0645 \u0627\u0644\u0645\u0646\u0635\u0629.",
+        icon: <LayoutDashboard className="h-5 w-5" aria-hidden="true" />,
+        id: "dashboard-main",
+        title: text.dashboard,
+        requiresCourse: true,
+        to: (courseSlug, cohortTag) =>
+          dashboardPath({
+            courseSlug,
+            cohortTag,
+            entity: defaultEntity,
+          }),
+      },
+      {
+        description: "\u0636\u0628\u0637 \u0648\u0645\u062A\u0627\u0628\u0639\u0629 \u0627\u0644\u062F\u0648\u0631\u0627\u062A \u0648\u062D\u0627\u0644\u062A\u0647\u0627.",
+        icon: <Layers3 className="h-5 w-5" aria-hidden="true" />,
+        id: "courses",
+        title: text.courses,
+        to: () => "/courses",
+      },
+      {
+        description: "\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062D\u0636\u0648\u0631 \u0644\u0644\u062C\u0644\u0633\u0629 \u0627\u0644\u064A\u0648\u0645\u064A\u0629 \u0628\u0633\u0631\u0639\u0629.",
+        icon: <CheckCircle2 className="h-5 w-5" aria-hidden="true" />,
+        id: "attendance-take",
+        title: "\u0623\u062E\u0630 \u0627\u0644\u062D\u0636\u0648\u0631",
+        requiresCourse: true,
+        to: (courseSlug, cohortTag) =>
+          dashboardPath({
+            courseSlug,
+            cohortTag,
+            entity: "attendanceRecords",
+            subpage: "take",
+          }),
+      },
+      {
+        description: "\u0645\u0624\u0634\u0631\u0627\u062A \u0648\u0645\u0646\u062D\u0646\u064A\u0627\u062A \u0644\u0644\u062D\u0636\u0648\u0631.",
+        icon: <BarChart3 className="h-5 w-5" aria-hidden="true" />,
+        id: "attendance-charts",
+        title: "\u0645\u062E\u0637\u0637\u0627\u062A \u0627\u0644\u062D\u0636\u0648\u0631",
+        requiresCourse: true,
+        to: (courseSlug, cohortTag) =>
+          dashboardPath({
+            courseSlug,
+            cohortTag,
+            entity: "attendanceRecords",
+            subpage: "charts",
+          }),
+      },
+      {
+        description: "\u0645\u0644\u0641 \u0627\u0644\u062D\u0633\u0627\u0628 \u0648\u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u062C\u0644\u0633\u0629.",
+        icon: <UserRound className="h-5 w-5" aria-hidden="true" />,
+        id: "profile",
+        title: text.profile,
+        to: () => "/profile",
+      },
+      {
+        description: "\u0625\u062F\u0627\u0631\u0629 \u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u0645\u0646\u0635\u0629.",
+        icon: <Settings2 className="h-5 w-5" aria-hidden="true" />,
+        id: "settings",
+        title: text.settings,
+        to: () => "/settings",
+      },
+    ];
+
+    return (
+      <>
+        <div className="relative z-50 flex justify-end">{topAccessory}</div>
+        <section className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-6">
+          <h1 className="text-2xl font-bold text-ink sm:text-3xl">
+            {"\u0648\u062C\u0647\u062A\u0643 \u0627\u0644\u0630\u0643\u064A\u0629"}
+          </h1>
+          <p className="mt-2 text-sm leading-7 text-slate-600">
+            {"\u0627\u062E\u062A\u0631 \u0627\u0644\u062F\u0648\u0631\u0629 \u0623\u0648\u0644\u0627\u064B \u062B\u0645 \u0627\u0646\u062A\u0642\u0644 \u0645\u0628\u0627\u0634\u0631\u0629 \u0625\u0644\u0649 \u0627\u0644\u0635\u0641\u062D\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629."}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {courses.map((course) => (
+              <Button
+                className="rounded-full"
+                key={course.id}
+                onClick={() => setHomeCourseSlug(course.slug)}
+                variant={homeCourse?.slug === course.slug ? "default" : "outline"}
+              >
+                {course.name}
+              </Button>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {homeActions.map((action) => (
+              <button
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-cedar/30 hover:bg-cedar/5 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={action.requiresCourse && !homeCourse}
+                key={action.id}
+                onClick={() => {
+                  if (action.requiresCourse && !homeCourse) {
+                    return;
+                  }
+                  void navigate({
+                    to: action.to(homeCourse?.slug ?? "default", activeCohort?.tag),
+                  });
+                }}
+                type="button"
+              >
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-cedar/10 text-cedar">
+                  {action.icon}
+                </span>
+                <h2 className="mt-3 text-base font-bold text-ink">{action.title}</h2>
+                <p className="mt-1 text-xs leading-6 text-slate-600">
+                  {action.description}
+                </p>
+              </button>
+            ))}
+          </div>
+          <div className="mt-5">
+            <Button
+              onClick={() => {
+                void navigate({
+                  to: dashboardPath({
+                    courseSlug: activeCourse?.slug ?? "default",
+                    cohortTag: activeCohort?.tag,
+                    entity: defaultEntity,
+                  }),
+                });
+              }}
+              type="button"
+            >
+              {text.dashboard}
+            </Button>
+          </div>
+        </section>
       </>
     );
   }
