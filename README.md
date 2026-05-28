@@ -30,10 +30,24 @@ Authentication is documented in [AUTH.md](AUTH.md). The signed-in admin workspac
 
 ```bash
 bun run dev
+bun run db:migrate
 bun run typecheck
 bun run build
 bun run preview
 ```
+
+## Data layer
+
+Runtime Neon configuration and client setup live in `src/data/neon.ts`. CRUD table metadata lives in `src/crud/entities.ts`, while database operations are split into focused repository modules under `src/crud/`. See `src/data/README.md` before adding a new table or changing schema behavior.
+
+Run database migrations against a Neon branch with an owner `DATABASE_URL`:
+
+```powershell
+$env:DATABASE_URL='postgresql://...'
+npm run db:migrate
+```
+
+Migration order and one-off commands are documented in `sql/README.md`.
 
 Attendance CSV imports must target a course:
 

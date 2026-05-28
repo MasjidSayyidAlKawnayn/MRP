@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import {
+  BarController,
   BarElement,
   CategoryScale,
   Chart,
@@ -11,7 +12,15 @@ import {
 } from "chart.js";
 import type { CrudRow } from "./data";
 
-Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+Chart.register(
+  CategoryScale,
+  LinearScale,
+  BarController,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+);
 
 export interface AttendanceChartData {
   groupId: string;
@@ -116,14 +125,33 @@ export async function renderAttendanceChartPngBlob(
     throw new Error("Could not create chart canvas context.");
   }
 
+  async function loadTemplateImage(src: string) {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () =>
+        reject(new Error(`Failed to load chart template image: ${src}`));
+      image.src = src;
+    });
+  }
+
+  // Use the provided branding template when available.
+  try {
+    const template = await loadTemplateImage("/وارتقِ.svg");
+    context.drawImage(template, 0, 0, width, height);
+  } catch {
+    context.fillStyle = "#f8fafc";
+    context.fillRect(0, 0, width, height);
+  }
+
   const config: ChartConfiguration<"bar", number[], string> = {
     type: "bar",
     data: {
-      labels: ["Present", "Late", "Missing"],
+      labels: ["حاضر", "متأخر", "غائب"],
       datasets: [
         {
           data: [stats.present, stats.late, stats.missing],
-          backgroundColor: ["#10b981", "#f59e0b", "#94a3b8"],
+          backgroundColor: ["#15803d", "#f59e0b", "#334155"],
           borderRadius: 8,
         },
       ],
@@ -131,11 +159,14 @@ export async function renderAttendanceChartPngBlob(
     options: {
       responsive: false,
       animation: false,
+      layout: {
+        padding: { top: 64, right: 80, bottom: 72, left: 80 },
+      },
       plugins: {
         legend: { display: false },
         title: {
           display: true,
-          text: `${stats.groupName} | ${fromDate} to ${toDate}`,
+          text: `${stats.groupName} | ${fromDate} - ${toDate}`,
           color: "#0f172a",
           font: { size: 26, weight: "bold" },
         },
@@ -155,7 +186,7 @@ export async function renderAttendanceChartPngBlob(
 
   const chart = new Chart(context, config);
   chart.update("none");
-  chart.destroy();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((value) => {
@@ -166,6 +197,8 @@ export async function renderAttendanceChartPngBlob(
       resolve(value);
     }, "image/png");
   });
+
+  chart.destroy();
 
   return blob;
 }

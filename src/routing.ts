@@ -8,6 +8,7 @@ import {
 } from "./crud/entities";
 
 export type WorkspacePage =
+  | "home"
   | "courseCreate"
   | "courseDelete"
   | "courseDetail"
