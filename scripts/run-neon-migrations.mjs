@@ -10,6 +10,7 @@ const migrationFiles = [
   "fix_attendance_rls.sql",
   "fix_cohort_rls.sql",
   "secure_admin_rls.sql",
+  "user_onboarding_state.sql",
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
