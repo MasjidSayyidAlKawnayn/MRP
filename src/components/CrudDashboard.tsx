@@ -683,7 +683,10 @@ function EntityNav({
     typeof document === "undefined"
       ? null
       : createPortal(
-          <aside className="fixed right-0 top-0 z-[80] hidden h-screen w-72 overflow-y-auto border-l border-white/70 bg-white/95 p-4 pt-6 shadow-2xl shadow-slate-900/20 backdrop-blur xl:block">
+          <aside
+            className="fixed right-0 top-0 z-[80] hidden h-screen w-72 overflow-y-auto border-l border-white/70 bg-white/95 p-4 pt-6 shadow-2xl shadow-slate-900/20 backdrop-blur xl:block"
+            data-onboarding="dashboard-nav"
+          >
             {navContent}
           </aside>,
           document.body,
@@ -701,7 +704,11 @@ function EntityNav({
           }}
           open={isOpen}
         >
-          <SheetContent className="w-72 max-w-[82vw] overflow-y-auto p-4 pt-20" side="right">
+          <SheetContent
+            className="w-72 max-w-[82vw] overflow-y-auto p-4 pt-20"
+            data-onboarding="dashboard-nav"
+            side="right"
+          >
             {navContent}
           </SheetContent>
         </Sheet>
@@ -3812,7 +3819,10 @@ export function CrudDashboard({
 
         {!attendanceTaking && activeEntityKey !== "points" ? (
         <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
-          <div className="space-y-2 border-b border-slate-200/80 px-3 py-2.5">
+          <div
+            className="space-y-2 border-b border-slate-200/80 px-3 py-2.5"
+            data-onboarding="dashboard-table-tools"
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 text-right">
                 <h2 className="text-base font-bold text-ink sm:text-lg">{activeEntity.label}</h2>
