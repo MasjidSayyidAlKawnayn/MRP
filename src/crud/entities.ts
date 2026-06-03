@@ -15,6 +15,7 @@ export type EntityKey =
   | "groups"
   | "assignments"
   | "pages"
+  | "awqafCertificatePages"
   | "pagePointAwards"
   | "manualPointTransactions"
   | "pagePointTiers"
@@ -234,11 +235,23 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         required: true,
       },
       {
+        key: "fatherName",
+        column: "father_name",
+        label: "Father name",
+        type: "text",
+      },
+      {
         key: "birthYear",
         column: "birth_year",
         label: "Birth year",
         type: "number",
         min: 1900,
+      },
+      {
+        key: "schoolYear",
+        column: "school_year",
+        label: "School year",
+        type: "text",
       },
       { key: "phone", column: "phone", label: "Phone", type: "text" },
       {
@@ -252,6 +265,25 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         column: "mother_phone",
         label: "Mother phone",
         type: "text",
+      },
+      {
+        key: "residence",
+        column: "residence",
+        label: "Residence",
+        type: "textarea",
+      },
+      {
+        key: "transportRequired",
+        column: "transport_required",
+        label: "Transport required",
+        type: "boolean",
+        required: true,
+      },
+      {
+        key: "registrationSubmittedAt",
+        column: "registration_submitted_at",
+        label: "Registration submitted at",
+        type: "datetime",
       },
       {
         key: "group",
@@ -276,7 +308,7 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
       },
       ...timestamps,
     ],
-    listFields: ["firstName", "lastName", "groupId"],
+    listFields: ["firstName", "lastName", "fatherName", "schoolYear", "groupId"],
     displayFields: ["firstName", "lastName"],
   },
   {
@@ -445,6 +477,44 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
       ...timestamps,
     ],
     listFields: ["id", "studentId", "page", "memorizedOn"],
+    displayFields: ["studentId", "page"],
+  },
+  {
+    table: "awqaf_certificate_pages",
+    label: "Awqaf Certificate Pages",
+    singularLabel: "Awqaf Certificate Page",
+    description:
+      "Track the pages already certified for each student by the Awqaf program.",
+    fields: [
+      idField,
+      {
+        key: "studentId",
+        column: "student_id",
+        label: "Student",
+        type: "number",
+        required: true,
+        relation: studentRelation,
+      },
+      {
+        key: "page",
+        column: "page",
+        label: "Page",
+        type: "number",
+        min: 1,
+        max: 604,
+        required: true,
+        helpText: "Quran page number from 1 to 604.",
+      },
+      {
+        key: "certifiedOn",
+        column: "certified_on",
+        label: "Certified on",
+        type: "date",
+        required: true,
+      },
+      ...timestamps,
+    ],
+    listFields: ["id", "studentId", "page", "certifiedOn"],
     displayFields: ["studentId", "page"],
   },
   {
@@ -672,6 +742,7 @@ const entityKeys: EntityKey[] = [
   "groups",
   "assignments",
   "pages",
+  "awqafCertificatePages",
   "pagePointAwards",
   "manualPointTransactions",
   "pagePointTiers",
@@ -722,6 +793,14 @@ const arabicEntities: Record<
     singularLabel: "\u0635\u0641\u062D\u0629 \u062D\u0641\u0638",
     description:
       "\u062A\u0633\u062C\u064A\u0644 \u0635\u0641\u062D\u0627\u062A \u0627\u0644\u0642\u0631\u0622\u0646 \u0627\u0644\u062A\u064A \u0623\u062A\u0645 \u0627\u0644\u0637\u0627\u0644\u0628 \u062D\u0641\u0638\u0647\u0627.",
+  },
+  awqafCertificatePages: {
+    label:
+      "\u0635\u0641\u062D\u0627\u062A \u0634\u0647\u0627\u062F\u0627\u062A \u0627\u0644\u0623\u0648\u0642\u0627\u0641",
+    singularLabel:
+      "\u0635\u0641\u062D\u0629 \u0634\u0647\u0627\u062F\u0629 \u0623\u0648\u0642\u0627\u0641",
+    description:
+      "\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u0635\u0641\u062D\u0627\u062A \u0627\u0644\u062A\u064A \u062A\u063A\u0637\u064A\u0647\u0627 \u0634\u0647\u0627\u062F\u0627\u062A \u0627\u0644\u0623\u0648\u0642\u0627\u0641 \u0644\u0644\u0637\u0644\u0628\u0629.",
   },
   cohorts: {
     label: "\u0627\u0644\u0623\u0641\u0648\u0627\u062C",
@@ -779,10 +858,12 @@ const arabicFieldLabels: Record<string, string> = {
   attendanceSessionId:
     "\u062C\u0644\u0633\u0629 \u0627\u0644\u062D\u0636\u0648\u0631",
   birthYear: "\u0633\u0646\u0629 \u0627\u0644\u0645\u064A\u0644\u0627\u062F",
+  certifiedOn: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0634\u0647\u0627\u062F\u0629",
   createdAt: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u0625\u0646\u0634\u0627\u0621",
   deletedAt: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062D\u0630\u0641",
   description: "\u0627\u0644\u0648\u0635\u0641",
   dueDate: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062A\u0633\u0644\u064A\u0645",
+  fatherName: "\u0627\u0633\u0645 \u0627\u0644\u0623\u0628",
   fatherPhone: "\u0647\u0627\u062A\u0641 \u0627\u0644\u0623\u0628",
   firstName: "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0644",
   group: "\u0627\u0633\u0645 \u0627\u0644\u0645\u062C\u0645\u0648\u0639\u0629",
@@ -804,9 +885,15 @@ const arabicFieldLabels: Record<string, string> = {
   memorizedOn: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062D\u0641\u0638",
   memorizationPageId: "\u0635\u0641\u062D\u0629 \u0627\u0644\u062D\u0641\u0638",
   ruleName: "\u0627\u0633\u0645 \u0627\u0644\u0642\u0627\u0639\u062F\u0629",
+  registrationSubmittedAt:
+    "\u0648\u0642\u062A \u062A\u0642\u062F\u064A\u0645 \u0627\u0644\u062A\u0633\u062C\u064A\u0644",
+  residence: "\u0645\u0643\u0627\u0646 \u0627\u0644\u0633\u0643\u0646",
+  schoolYear: "\u0627\u0644\u0633\u0646\u0629 \u0627\u0644\u062F\u0631\u0627\u0633\u064A\u0629",
   snapshot: "\u0644\u0642\u0637\u0629 \u0627\u0644\u0642\u0627\u0639\u062F\u0629",
   points: "\u0627\u0644\u0646\u0642\u0627\u0637",
   transactionDate: "\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062D\u0631\u0643\u0629",
+  transportRequired:
+    "\u0647\u0644 \u062A\u0631\u063A\u0628 \u0628\u0627\u0644\u0627\u0634\u062A\u0631\u0627\u0643 \u0628\u0627\u0644\u0645\u0648\u0627\u0635\u0644\u0627\u062A\u061F",
   amount: "\u0627\u0644\u0645\u0642\u062F\u0627\u0631",
   reason: "\u0627\u0644\u0633\u0628\u0628",
   minPages: "\u0623\u0642\u0644 \u0639\u062F\u062F \u0635\u0641\u062D\u0627\u062A",

@@ -23,10 +23,11 @@ npm run db:migrate -- --only secure_admin_rls.sql
 2. `cohort_cycles.sql`
 3. `group_color_codes.sql`
 4. `points_and_page_tracking.sql`
-5. `fix_attendance_rls.sql`
-6. `fix_cohort_rls.sql`
-7. `secure_admin_rls.sql`
-8. `user_onboarding_state.sql`
+5. `student_registration_fields.sql`
+6. `fix_attendance_rls.sql`
+7. `fix_cohort_rls.sql`
+8. `secure_admin_rls.sql`
+9. `user_onboarding_state.sql`
 
 After the first admin signs up through Neon Auth, insert their Neon Auth user ID into `public.app_admins` with `owner = true` from a trusted database session.
 
