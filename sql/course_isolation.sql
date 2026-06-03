@@ -33,6 +33,7 @@ begin
     'groups',
     'homework_assignments',
     'memorization_pages',
+    'awqaf_certificate_pages',
     'page_point_awards',
     'manual_point_transactions',
     'page_point_tiers',
@@ -52,6 +53,7 @@ create index if not exists groups_course_id_idx on mqs.groups(course_id);
 create index if not exists teacher_course_id_idx on mqs.teacher(course_id);
 create index if not exists homework_assignments_course_id_idx on mqs.homework_assignments(course_id);
 create index if not exists memorization_pages_course_id_idx on mqs.memorization_pages(course_id);
+create index if not exists awqaf_certificate_pages_course_id_idx on mqs.awqaf_certificate_pages(course_id);
 create index if not exists page_point_awards_course_id_idx on mqs.page_point_awards(course_id);
 create index if not exists manual_point_transactions_course_id_idx on mqs.manual_point_transactions(course_id);
 create index if not exists page_point_tiers_course_id_idx on mqs.page_point_tiers(course_id);
@@ -122,6 +124,8 @@ begin
     perform mqs.assert_same_course('mqs.students', new.student_id, new.course_id, 'student');
   elsif tg_table_name = 'memorization_pages' then
     perform mqs.assert_same_course('mqs.students', new.student_id, new.course_id, 'student');
+  elsif tg_table_name = 'awqaf_certificate_pages' then
+    perform mqs.assert_same_course('mqs.students', new.student_id, new.course_id, 'student');
   elsif tg_table_name = 'page_point_awards' then
     perform mqs.assert_same_course('mqs.memorization_pages', new.memorization_page_id, new.course_id, 'memorization page');
     perform mqs.assert_same_course('mqs.students', new.student_id, new.course_id, 'student');
@@ -146,6 +150,7 @@ begin
     'groups',
     'homework_assignments',
     'memorization_pages',
+    'awqaf_certificate_pages',
     'page_point_awards',
     'manual_point_transactions',
     'attendance_records'

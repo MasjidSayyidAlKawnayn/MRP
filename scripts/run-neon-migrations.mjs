@@ -7,6 +7,7 @@ const migrationFiles = [
   "cohort_cycles.sql",
   "group_color_codes.sql",
   "points_and_page_tracking.sql",
+  "student_registration_fields.sql",
   "fix_attendance_rls.sql",
   "fix_cohort_rls.sql",
   "secure_admin_rls.sql",

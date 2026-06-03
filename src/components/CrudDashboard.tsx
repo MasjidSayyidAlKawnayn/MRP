@@ -247,6 +247,7 @@ const entityIcons: Record<EntityKey, LucideIcon> = {
   groups: UsersRound,
   assignments: FileText,
   pages: BookOpen,
+  awqafCertificatePages: ShieldCheck,
   pagePointAwards: Trophy,
   manualPointTransactions: Trophy,
   pagePointTiers: SlidersHorizontal,
