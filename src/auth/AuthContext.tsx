@@ -3,11 +3,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { authClient } from "./client";
+import { getSchemaClient } from "../data/neon";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not sign out.";
@@ -29,6 +31,23 @@ function getBooleanField(value: unknown, key: string) {
 
   const field = (value as Record<string, unknown>)[key];
   return typeof field === "boolean" ? field : undefined;
+}
+
+function getRpcBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    return getRpcBoolean(value[0]);
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return getRpcBoolean(record.is_app_admin ?? record.result);
+  }
+
+  return false;
 }
 
 export interface AuthContextValue {
@@ -57,6 +76,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, error, isPending } = authClient.useSession();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [adminCheck, setAdminCheck] = useState<{
+    isAdmin: boolean;
+    isLoading: boolean;
+    userId?: string;
+  }>({
+    isAdmin: false,
+    isLoading: false,
+  });
+  const userId = getStringField(data?.user, "id");
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (isPending || !userId) {
+      setAdminCheck({
+        isAdmin: false,
+        isLoading: false,
+        userId,
+      });
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    setAdminCheck({
+      isAdmin: false,
+      isLoading: true,
+      userId,
+    });
+
+    async function checkAdminAccess() {
+      try {
+        const response = await getSchemaClient("public").rpc("is_app_admin");
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setAdminCheck({
+          isAdmin: !response.error && getRpcBoolean(response.data),
+          isLoading: false,
+          userId,
+        });
+      } catch {
+        if (isCurrent) {
+          setAdminCheck({
+            isAdmin: false,
+            isLoading: false,
+            userId,
+          });
+        }
+      }
+    }
+
+    void checkAdminAccess();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isPending, userId]);
 
   const signOut = useCallback(async () => {
     setIsSigningOut(true);
@@ -82,13 +161,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       session,
       isAuthenticated: Boolean(user),
-      hasAdminUiAccess: Boolean(user),
-      isLoading: isPending,
+      hasAdminUiAccess: Boolean(user) && adminCheck.isAdmin,
+      isLoading:
+        isPending ||
+        (Boolean(user) &&
+          (adminCheck.isLoading || adminCheck.userId !== userId)),
       isSigningOut,
       error,
       signOutError,
       signOut,
-      userId: getStringField(user, "id"),
+      userId,
       name: getStringField(user, "name"),
       email,
       image: getStringField(user, "image"),
@@ -99,11 +181,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [
     data?.session,
     data?.user,
+    adminCheck.isAdmin,
+    adminCheck.isLoading,
+    adminCheck.userId,
     error,
     isPending,
     isSigningOut,
     signOut,
     signOutError,
+    userId,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
