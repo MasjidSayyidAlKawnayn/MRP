@@ -8,7 +8,14 @@
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef,
+} from "@tanstack/react-table";
 import {
   BookOpen,
   CalendarCheck,
@@ -17,6 +24,7 @@ import {
   BarChart3,
   Database,
   Eye,
+  ExternalLink,
   FileUp,
   FileText,
   GraduationCap,
@@ -91,6 +99,7 @@ import {
   type ParsedAttendanceImport,
 } from "../crud/importAttendance";
 import { Button } from "./ui/button";
+import { queryKeys } from "../features/query/keys";
 import {
   Dialog,
   DialogContent,
@@ -514,6 +523,64 @@ function splitPoints(totalPoints: number, count: number) {
   );
 }
 
+function formatPageRange(start: number, end: number) {
+  return start === end ? String(start) : `${start}-${end}`;
+}
+
+function formatPageRanges(pages: number[]) {
+  const sortedPages = Array.from(new Set(pages)).sort((left, right) => left - right);
+  const ranges: string[] = [];
+  let rangeStart: number | null = null;
+  let previousPage: number | null = null;
+
+  sortedPages.forEach((page) => {
+    if (rangeStart === null || previousPage === null) {
+      rangeStart = page;
+      previousPage = page;
+      return;
+    }
+
+    if (page === previousPage + 1) {
+      previousPage = page;
+      return;
+    }
+
+    ranges.push(formatPageRange(rangeStart, previousPage));
+    rangeStart = page;
+    previousPage = page;
+  });
+
+  if (rangeStart !== null && previousPage !== null) {
+    ranges.push(formatPageRange(rangeStart, previousPage));
+  }
+
+  return ranges.join(", ");
+}
+
+function getGroupedMemorizationPageRows(rows: CrudRow[]) {
+  const rowGroups = new Map<string, CrudRow[]>();
+
+  rows.forEach((row) => {
+    const key = `${String(row.studentId ?? "")}|${String(row.memorizedOn ?? "")}`;
+    rowGroups.set(key, [...(rowGroups.get(key) ?? []), row]);
+  });
+
+  return Array.from(rowGroups.entries()).map(([key, groupRows]) => {
+    const pages = groupRows
+      .map((row) => Number(row.page))
+      .filter((page) => Number.isInteger(page));
+    const firstRow = groupRows[0];
+
+    return {
+      ...firstRow,
+      id: `group:${key}`,
+      page: formatPageRanges(pages),
+      groupedRowCount: groupRows.length,
+      isGroupedPageRow: true,
+    };
+  });
+}
+
 function getRelationLabel(
   field: FieldDefinition,
   value: CrudValue | undefined,
@@ -579,9 +646,9 @@ function EntityNav({
   activeEntityId,
   activeSchema,
   entityDefinitions,
+  getEntityPath,
   isOpen,
   onClose,
-  onSelect,
   onSelectAttendanceTaking,
   onSelectAttendanceCharts,
   showAttendanceChartsActive,
@@ -589,9 +656,9 @@ function EntityNav({
   activeEntityId: EntityId;
   activeSchema: SchemaName;
   entityDefinitions: EntityDefinition[];
+  getEntityPath: (entityId: EntityId) => string;
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (entityId: EntityId) => void;
   onSelectAttendanceTaking: () => void;
   onSelectAttendanceCharts: () => void;
   showAttendanceChartsActive: boolean;
@@ -609,17 +676,15 @@ function EntityNav({
 
           return (
             <div className="grid gap-1" key={entity.id}>
-            <button
+            <Link
               className={`flex min-h-14 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
                 entity.id === activeEntityId
                   ? "bg-cedar text-white shadow-lg shadow-cedar/25"
                   : "text-slate-700 hover:bg-cedar/5 hover:text-cedar"
               }`}
-              onClick={() => {
-                onSelect(entity.id);
-                onClose();
-              }}
-              type="button"
+              onClick={onClose}
+              search={{}}
+              to={getEntityPath(entity.id)}
             >
               <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
               <span className="min-w-0">
@@ -628,7 +693,7 @@ function EntityNav({
                   {entity.description}
                 </span>
               </span>
-            </button>
+            </Link>
             {entity.id === `${activeSchema}.attendanceRecords` ? (
               <>
                 <button
@@ -966,10 +1031,10 @@ function DetailView({
       {studentStats ? (
         <div className="mt-5 grid gap-3 md:grid-cols-4">
           {[
-            ["طµظپط­ط§طھ ط§ظ„ط­ظپط¸", studentStats.memorizedPages],
-            ["ظ†ظ‚ط§ط· ط§ظ„ط­ظپط¸", studentStats.pagePoints],
-            ["ط§ظ„ظ†ظ‚ط§ط· ط§ظ„ظٹط¯ظˆظٹط©", studentStats.manualPoints],
-            ["ط§ظ„ظ…ط¬ظ…ظˆط¹", studentStats.totalPoints],
+            ["صفحات الحفظ", studentStats.memorizedPages],
+            ["نقاط الحفظ", studentStats.pagePoints],
+            ["النقاط اليدوية", studentStats.manualPoints],
+            ["المجموع", studentStats.totalPoints],
           ].map(([label, value]) => (
             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={label}>
               <p className="text-xs font-bold text-slate-500">{label}</p>
@@ -977,21 +1042,21 @@ function DetailView({
             </div>
           ))}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
-            <p className="text-sm font-bold text-ink">ط¢ط®ط± طµظپط­ط§طھ ط§ظ„ط­ظپط¸</p>
+            <p className="text-sm font-bold text-ink">آخر صفحات الحفظ</p>
             <div className="mt-3 space-y-2 text-sm text-slate-700">
               {recentPages.length ? recentPages.map((page) => (
                 <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(page.id)}>
-                  طµظپط­ط© {formatValue(page.page)} آ· {formatValue(page.memorizedOn)}
+                  صفحة {formatValue(page.page)} · {formatValue(page.memorizedOn)}
                 </p>
               )) : <p className="text-slate-500">{ui.noRecords}</p>}
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
-            <p className="text-sm font-bold text-ink">ط¢ط®ط± ط­ط±ظƒط§طھ ط§ظ„ظ†ظ‚ط§ط·</p>
+            <p className="text-sm font-bold text-ink">آخر حركات النقاط</p>
             <div className="mt-3 space-y-2 text-sm text-slate-700">
               {recentManualTransactions.length ? recentManualTransactions.map((transaction) => (
                 <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(transaction.id)}>
-                  {formatValue(transaction.amount)} آ· {formatValue(transaction.reason)}
+                  {formatValue(transaction.amount)} · {formatValue(transaction.reason)}
                 </p>
               )) : <p className="text-slate-500">{ui.noRecords}</p>}
             </div>
@@ -1034,6 +1099,7 @@ const courseUi = {
   noCourses: "\u0644\u0627 \u062A\u0648\u062C\u062F \u062F\u0648\u0631\u0627\u062A \u0628\u0639\u062F.",
   notFound: "\u0644\u0645 \u064A\u062A\u0645 \u0627\u0644\u0639\u062B\u0648\u0631 \u0639\u0644\u0649 \u0647\u0630\u0647 \u0627\u0644\u062F\u0648\u0631\u0629.",
   openDashboard: "\u0641\u062A\u062D \u0644\u0648\u062D\u0629 \u0627\u0644\u062F\u0648\u0631\u0629",
+  openCourse: "\u0641\u062A\u062D \u0627\u0644\u062F\u0648\u0631\u0629",
   saveChanges: "\u062D\u0641\u0638 \u0627\u0644\u062A\u0639\u062F\u064A\u0644\u0627\u062A",
   slug: "\u0631\u0627\u0628\u0637 \u0627\u0644\u062F\u0648\u0631\u0629",
 };
@@ -1229,7 +1295,22 @@ export function CourseListPage({ courses }: { courses: Course[] }) {
                   </p>
                 ) : null}
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-cedar px-3 text-xs font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
+                  onClick={() =>
+                    void navigate({
+                      to: dashboardPath({
+                        courseSlug: course.slug,
+                        entity: "cohorts",
+                      }),
+                    })
+                  }
+                  type="button"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{courseUi.openCourse}</span>
+                </button>
                 <ActionButton
                   compact
                   icon={Eye}
@@ -1913,7 +1994,7 @@ function AdminUsersSettings() {
     setError(null);
 
     if (!draft.userId.trim()) {
-      setError("ط£ط¯ط®ظ„ ظ…ط¹ط±ظپ ط§ظ„ظ…ط³طھط®ط¯ظ….");
+      setError("أدخل معرف المستخدم.");
       return;
     }
 
@@ -1961,9 +2042,9 @@ function AdminUsersSettings() {
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-ink">ط¥ط¯ط§ط±ط© ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ</p>
+          <p className="text-sm font-bold text-ink">إدارة المستخدمين والصلاحيات</p>
           <p className="mt-1 text-xs leading-6 text-slate-500">
-            ط§ظ„ظ…ط³طھط®ط¯ظ… ط§ظ„ظ…ط§ظ„ظƒ ظٹط³طھط·ظٹط¹ ط¥ط¯ط§ط±ط© ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ ظˆظ„ظ‡ ظˆطµظˆظ„ ظƒط§ظ…ظ„ ظ„ظƒظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ.
+            المستخدم المالك يستطيع إدارة المستخدمين والصلاحيات وله وصول كامل لكل البيانات.
           </p>
         </div>
         <ShieldCheck className="h-5 w-5 text-cedar" aria-hidden="true" />
@@ -1999,7 +2080,7 @@ function AdminUsersSettings() {
                 placeholder="email@example.com"
               />
               <label className="inline-flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700">
-                <span>ظ…ط§ظ„ظƒ</span>
+                <span>مالك</span>
                 <input
                   checked={admin.owner}
                   className="h-4 w-4 accent-cedar"
@@ -2040,7 +2121,7 @@ function AdminUsersSettings() {
           value={draft.email}
         />
         <label className="inline-flex h-11 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
-          <span>ظ…ط§ظ„ظƒ</span>
+          <span>مالك</span>
           <input
             checked={draft.owner}
             className="h-4 w-4 accent-cedar"
@@ -2094,7 +2175,7 @@ function PageTierSettings({
     const maxPages = draft.maxPages ? Number(draft.maxPages) : null;
     const points = Number(draft.points);
     if (!Number.isInteger(minPages) || !Number.isInteger(points) || minPages < 1 || (maxPages !== null && (!Number.isInteger(maxPages) || maxPages < minPages))) {
-      setError("ط£ط¯ط®ظ„ ط´ط±ظٹط­ط© طµط­ظٹط­ط©.");
+      setError("أدخل شريحة صحيحة.");
       return;
     }
     await createRow(tierEntity, {
@@ -2127,8 +2208,8 @@ function PageTierSettings({
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-ink">ط´ط±ط§ط¦ط­ ظ†ظ‚ط§ط· ط§ظ„ط­ظپط¸</p>
-          <p className="mt-1 text-xs text-slate-500">طھط·ط¨ظ‚ ط¹ظ„ظ‰ ط§ظ„طµظپط­ط§طھ ط§ظ„ط¬ط¯ظٹط¯ط© ط§ظ„ظ…ط­ظپظˆط¸ط© ظپظٹ ط§ظ„ط¯ظپط¹ط© ط§ظ„ظˆط§ط­ط¯ط©.</p>
+          <p className="text-sm font-bold text-ink">شرائح نقاط الحفظ</p>
+          <p className="mt-1 text-xs text-slate-500">تطبق على الصفحات الجديدة المحفوظة في الدفعة الواحدة.</p>
         </div>
         <SlidersHorizontal className="h-5 w-5 text-cedar" aria-hidden="true" />
       </div>
@@ -2138,18 +2219,18 @@ function PageTierSettings({
           <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-5 md:items-center" key={String(tier.id)}>
             <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "name", event.target.value)} defaultValue={String(tier.name ?? "")} />
             <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "minPages", Number(event.target.value))} defaultValue={String(tier.minPages ?? "")} type="number" min={1} />
-            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "maxPages", event.target.value ? Number(event.target.value) : null)} defaultValue={tier.maxPages === null ? "" : String(tier.maxPages ?? "")} type="number" min={1} placeholder="ط¨ظ„ط§ ط­ط¯" />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "maxPages", event.target.value ? Number(event.target.value) : null)} defaultValue={tier.maxPages === null ? "" : String(tier.maxPages ?? "")} type="number" min={1} placeholder="بلا حد" />
             <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" onBlur={(event) => void handleTierChange(tier, "points", Number(event.target.value))} defaultValue={String(tier.points ?? "")} type="number" />
             <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleDeleteTier(tier)} />
           </div>
         ))}
       </div>
       <form className="mt-4 grid gap-3 md:grid-cols-[repeat(4,minmax(0,1fr))_auto] md:items-end" onSubmit={handleAddTier}>
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="ط§ط³ظ… ط§ظ„ط´ط±ظٹط­ط©" value={draft.name} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="اسم الشريحة" value={draft.name} />
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, minPages: event.target.value }))} type="number" value={draft.minPages} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="ط¨ظ„ط§ ط­ط¯" type="number" value={draft.maxPages} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" min={1} onChange={(event) => setDraft((current) => ({ ...current, maxPages: event.target.value }))} placeholder="بلا حد" type="number" value={draft.maxPages} />
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(event) => setDraft((current) => ({ ...current, points: event.target.value }))} type="number" value={draft.points} />
-        <button className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl bg-cedar px-3 text-sm font-bold text-white md:w-auto" type="submit">ط¥ط¶ط§ظپط© ط´ط±ظٹط­ط©</button>
+        <button className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-xl bg-cedar px-3 text-sm font-bold text-white md:w-auto" type="submit">إضافة شريحة</button>
       </form>
     </div>
   );
@@ -2207,23 +2288,23 @@ function PointsWorkspace({
       <div className="space-y-3 border-b border-slate-200/80 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-bold text-cedar">ظ„ظˆط­ط© ط§ظ„ظ†ظ‚ط§ط·</p>
-            <h2 className="mt-1 text-2xl font-bold text-ink">طھط±طھظٹط¨ ط§ظ„ط·ظ„ط§ط¨ ظˆط§ظ„ط­ظپط¸</h2>
+            <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
+            <h2 className="mt-1 text-2xl font-bold text-ink">ترتيب الطلاب والحفظ</h2>
           </div>
           <div className="grid gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center">
             <select className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setRankMode(event.target.value as typeof rankMode)} value={rankMode}>
-              <option value="points">ط­ط³ط¨ ظ…ط¬ظ…ظˆط¹ ط§ظ„ظ†ظ‚ط§ط·</option>
-              <option value="pages">ط­ط³ط¨ طµظپط­ط§طھ ط§ظ„ط­ظپط¸</option>
-              <option value="recent">ط­ط³ط¨ ط§ظ„ظ†ط´ط§ط· ط¶ظ…ظ† ط§ظ„ظپطھط±ط©</option>
+              <option value="points">حسب مجموع النقاط</option>
+              <option value="pages">حسب صفحات الحفظ</option>
+              <option value="recent">حسب النشاط ضمن الفترة</option>
             </select>
             <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
             <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
-            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="ط¨ط­ط« ط¹ظ† ط·ط§ظ„ط¨" value={search} />
+            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="بحث عن طالب" value={search} />
             <button
-              aria-label="ط¥ط¶ط§ظپط© ظ†ظ‚ط§ط· ظٹط¯ظˆظٹط©"
+              aria-label="إضافة نقاط يدوية"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
               onClick={onOpenManualPoints}
-              title="ط¥ط¶ط§ظپط© ظ†ظ‚ط§ط· ظٹط¯ظˆظٹط©"
+              title="إضافة نقاط يدوية"
               type="button"
             >
               <Plus className="h-5 w-5" aria-hidden="true" />
@@ -2235,7 +2316,7 @@ function PointsWorkspace({
         <table className="w-full divide-y divide-slate-200 text-right text-sm">
           <thead className="bg-mist/70">
             <tr>
-              {["ط§ظ„طھط±طھظٹط¨", "ط§ظ„ط·ط§ظ„ط¨", "ط§ظ„ظ…ط¬ظ…ظˆط¹ط©", "ط§ظ„طµظپط­ط§طھ", "ظ†ظ‚ط§ط· ط§ظ„ط­ظپط¸", "ظٹط¯ظˆظٹ", "ط§ظ„ظ…ط¬ظ…ظˆط¹", "ط§ظ„ظپطھط±ط©", ""].map((label) => (
+              {["الترتيب", "الطالب", "المجموعة", "الصفحات", "نقاط الحفظ", "يدوي", "المجموع", "الفترة", ""].map((label) => (
                 <th className="px-3 py-2 font-bold text-slate-600" key={label}>{label}</th>
               ))}
             </tr>
@@ -2306,7 +2387,7 @@ function ManualPointsPage({
     const parsedAmount = Number(amount);
 
     if (!manualEntity || !studentId || !Number.isInteger(parsedAmount) || !reason.trim()) {
-      setError("ط§ط®طھط± ط§ظ„ط·ط§ظ„ط¨ ظˆط£ط¯ط®ظ„ ظ…ظ‚ط¯ط§ط± ط§ظ„ظ†ظ‚ط§ط· ظˆط§ظ„ط³ط¨ط¨.");
+      setError("اختر الطالب وأدخل مقدار النقاط والسبب.");
       return;
     }
 
@@ -2333,8 +2414,8 @@ function ManualPointsPage({
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
       <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-4">
         <div>
-          <p className="text-sm font-bold text-cedar">ظ„ظˆط­ط© ط§ظ„ظ†ظ‚ط§ط·</p>
-          <h2 className="mt-1 text-2xl font-bold text-ink">ط¥ط¶ط§ظپط© ظ†ظ‚ط§ط· ظٹط¯ظˆظٹط©</h2>
+          <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
+          <h2 className="mt-1 text-2xl font-bold text-ink">إضافة نقاط يدوية</h2>
         </div>
         <button
           aria-label={ui.cancel}
@@ -2355,8 +2436,8 @@ function ManualPointsPage({
           ))}
         </select>
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setTransactionDate(event.target.value)} type="date" value={transactionDate} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setAmount(event.target.value)} placeholder="ظ†ظ‚ط§ط· + ط£ظˆ -" type="number" value={amount} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="ط§ظ„ط³ط¨ط¨" value={reason} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setAmount(event.target.value)} placeholder="نقاط + أو -" type="number" value={amount} />
+        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="السبب" value={reason} />
         {error ? <p className="order-last rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-5">{error}</p> : null}
         <button
           className="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 md:w-auto"
@@ -2364,7 +2445,7 @@ function ManualPointsPage({
           type="submit"
         >
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-          <span>{isSaving ? ui.saving : "ط¥ط¶ط§ظپط© ط­ط±ظƒط©"}</span>
+          <span>{isSaving ? ui.saving : "إضافة حركة"}</span>
         </button>
       </form>
     </div>
@@ -2411,7 +2492,7 @@ function MemorizationWorkspace({
     const normalizedEnd = Math.max(firstPage, lastPage);
 
     if (!pagesEntity || !awardsEntity || !studentId || !Number.isInteger(firstPage) || !Number.isInteger(lastPage) || normalizedStart < 1 || normalizedEnd > 604) {
-      setError("ط£ط¯ط®ظ„ ط·ط§ظ„ط¨ط§ ظˆطµظپط­ط© ط£ظˆ ظ†ط·ط§ظ‚ط§ طµط­ظٹط­ط§ ط¨ظٹظ† 1 ظˆ604.");
+      setError("أدخل طالبا وصفحة أو نطاقا صحيحا بين 1 و604.");
       return;
     }
 
@@ -2421,7 +2502,7 @@ function MemorizationWorkspace({
     );
 
     if (duplicatePages.length) {
-      setError(`ظ‡ط°ظ‡ ط§ظ„طµظپط­ط§طھ ظ…ط³ط¬ظ„ط© ظ…ط³ط¨ظ‚ط§ ظ„ظ‡ط°ط§ ط§ظ„ط·ط§ظ„ط¨: ${duplicatePages.join(", ")}`);
+      setError(`هذه الصفحات مسجلة مسبقا لهذا الطالب: ${duplicatePages.join(", ")}`);
       return;
     }
 
@@ -2478,7 +2559,7 @@ function MemorizationWorkspace({
       <form className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5" onSubmit={handleSubmit}>
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-end">
           <label className="text-sm font-bold text-slate-700">
-            ط§ظ„ط·ط§ظ„ط¨
+            الطالب
             <select className={inputClass} onChange={(event) => setStudentId(event.target.value)} value={studentId}>
               {students.map((student) => (
                 <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
@@ -2486,20 +2567,20 @@ function MemorizationWorkspace({
             </select>
           </label>
           <label className="text-sm font-bold text-slate-700">
-            ظ…ظ† طµظپط­ط©
+            من صفحة
             <input className={inputClass} min={1} max={604} onChange={(event) => setFromPage(event.target.value)} type="number" value={fromPage} />
           </label>
           <label className="text-sm font-bold text-slate-700">
-            ط¥ظ„ظ‰ طµظپط­ط©
-            <input className={inputClass} min={1} max={604} onChange={(event) => setToPage(event.target.value)} placeholder="ط§ط®طھظٹط§ط±ظٹ" type="number" value={toPage} />
+            إلى صفحة
+            <input className={inputClass} min={1} max={604} onChange={(event) => setToPage(event.target.value)} placeholder="اختياري" type="number" value={toPage} />
           </label>
           <label className="text-sm font-bold text-slate-700">
-            ط§ظ„طھط§ط±ظٹط®
+            التاريخ
             <input className={inputClass} onChange={(event) => setMemorizedOn(event.target.value)} type="date" value={memorizedOn} />
           </label>
           <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cedar px-4 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60" disabled={isSaving} type="submit">
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            ط­ظپط¸
+            حفظ
           </button>
         </div>
         {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
@@ -2632,6 +2713,7 @@ function AttendanceWorkspace({
       student.firstName,
       student.lastName,
       student.phone,
+      student.primaryParentPhone,
       student.fatherPhone,
       student.motherPhone,
       group?.name,
@@ -2873,7 +2955,7 @@ function AttendanceWorkspace({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-bold text-ink">{getStudentName(student)}</span>
                       <span className="mt-0.5 block truncate text-xs text-slate-500">
-                        #{formatValue(student.id)} آ· {formatValue(studentGroup?.name)}
+                        #{formatValue(student.id)} · {formatValue(studentGroup?.name)}
                       </span>
                     </span>
                   </button>
@@ -3287,6 +3369,7 @@ export function CrudDashboard({
   topAccessory: ReactNode;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const entityDefinitions = useMemo(
     () => getEntityDefinitions(activeSchema),
     [activeSchema],
@@ -3295,11 +3378,8 @@ export function CrudDashboard({
   const activeEntity =
     findEntityDefinition(activeEntityId, entityDefinitions) ??
     entityDefinitions[0];
-  const [rows, setRows] = useState<CrudRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [relationOptions, setRelationOptions] = useState<RelationOptions>({});
+  const [mutationError, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const searchTerm = routeSearch.q ?? "";
   const draft = useMemo(() => decodeDraft(routeSearch.draft), [routeSearch.draft]);
@@ -3349,44 +3429,60 @@ export function CrudDashboard({
     [activeEntity, activeEntityKey, activeSchema],
   );
 
-  async function refreshRows(entity = activeEntity) {
-    setIsLoading(true);
-    setError(null);
+  const rowsQueryKey = queryKeys.rows(
+    activeSchema,
+    activeEntityKey,
+    activeCourse.id,
+    activeCohort?.id,
+  );
+  const relationOptionsQueryKey = queryKeys.relationOptions(
+    activeSchema,
+    activeEntityKey,
+    activeCourse.id,
+    activeCohort?.id,
+  );
+  const rowsQuery = useQuery({
+    queryKey: rowsQueryKey,
+    queryFn: () => listRows(activeEntity, activeCourse, activeCohort ?? undefined),
+  });
+  const relationOptionsQuery = useQuery({
+    queryKey: relationOptionsQueryKey,
+    queryFn: async () => {
+      const entries = await Promise.all(
+        relationEntityIds.map(async (entityId) => {
+          const entity = findEntityDefinition(entityId, entityDefinitions);
+          return entity
+            ? ([
+                entityId,
+                await listRows(entity, activeCourse, activeCohort ?? undefined),
+              ] as const)
+            : null;
+        }),
+      );
 
-    try {
-      setRows(await listRows(entity, activeCourse, activeCohort ?? undefined));
-    } catch (caughtError) {
-      setError(toReadableLoadError(caughtError));
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function refreshRelationOptions() {
-    const entries = await Promise.all(
-      relationEntityIds.map(async (entityId) => {
-        const entity = findEntityDefinition(entityId, entityDefinitions);
-        return entity
-          ? ([
-              entityId,
-              await listRows(entity, activeCourse, activeCohort ?? undefined),
-            ] as const)
-          : null;
-      }),
-    );
-
-    setRelationOptions(
-      Object.fromEntries(
+      return Object.fromEntries(
         entries.filter((entry): entry is [EntityId, CrudRow[]] =>
           Boolean(entry),
         ),
-      ),
-    );
+      );
+    },
+  });
+  const rows = rowsQuery.data ?? [];
+  const relationOptions = relationOptionsQuery.data ?? {};
+  const isLoading = rowsQuery.isLoading;
+  const error = mutationError ?? (rowsQuery.error ? toReadableLoadError(rowsQuery.error) : null);
+
+  async function refreshRows(entity = activeEntity) {
+    await queryClient.invalidateQueries({
+      queryKey:
+        entity.id === activeEntity.id
+          ? rowsQueryKey
+          : queryKeys.rows(activeSchema, getEntityKey(entity.id), activeCourse.id, activeCohort?.id),
+    });
   }
 
   useEffect(() => {
     setSelectedRow(null);
-    void refreshRows(activeEntity);
   }, [activeCohort, activeCourse, activeEntity]);
 
   useEffect(() => {
@@ -3402,23 +3498,37 @@ export function CrudDashboard({
     setSelectedRow(row ?? null);
   }, [mode, rowId, rows]);
 
-  useEffect(() => {
-    let isMounted = true;
+  async function invalidateDashboardQueries() {
+    setError(null);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: rowsQueryKey }),
+      queryClient.invalidateQueries({ queryKey: relationOptionsQueryKey }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.workspaceFacts(activeCourse.id, activeCohort?.id),
+      }),
+    ]);
+  }
 
-    if (relationEntityIds.length) {
-      void refreshRelationOptions().catch(() => {
-        if (isMounted) {
-          setRelationOptions({});
-        }
-      });
-    } else {
-      setRelationOptions({});
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeCohort, activeCourse, entityDefinitions, relationEntityIds]);
+  const createRowMutation = useMutation({
+    mutationFn: (values: Record<string, CrudValue>) =>
+      createRow(activeEntity, values, activeCourse, activeCohort ?? undefined),
+    onSuccess: invalidateDashboardQueries,
+  });
+  const updateRowMutation = useMutation({
+    mutationFn: ({
+      id,
+      values,
+    }: {
+      id: number;
+      values: Record<string, CrudValue>;
+    }) => updateRow(activeEntity, id, values, activeCourse, activeCohort ?? undefined),
+    onSuccess: invalidateDashboardQueries,
+  });
+  const deleteRowMutation = useMutation({
+    mutationFn: (id: number) =>
+      softDeleteRow(activeEntity, id, activeCourse, activeCohort ?? undefined),
+    onSuccess: invalidateDashboardQueries,
+  });
 
   async function handleSoftDelete(row: CrudRow) {
     const label = getRowLabel(activeEntity, row);
@@ -3435,8 +3545,7 @@ export function CrudDashboard({
       return;
     }
 
-    await softDeleteRow(activeEntity, id, activeCourse, activeCohort ?? undefined);
-    await refreshRows();
+    await deleteRowMutation.mutateAsync(id);
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
@@ -3456,10 +3565,16 @@ export function CrudDashboard({
         .join(" "),
     );
   }, [activeEntity, entityDefinitions, relationOptions, rows, searchTerm]);
+  const tableRows = useMemo(
+    () =>
+      activeEntityKey === "pages"
+        ? getGroupedMemorizationPageRows(filteredRows)
+        : filteredRows,
+    [activeEntityKey, filteredRows],
+  );
 
   async function handleCreate(values: Record<string, CrudValue>) {
-    await createRow(activeEntity, values, activeCourse, activeCohort ?? undefined);
-    await refreshRows();
+    await createRowMutation.mutateAsync(values);
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
@@ -3475,14 +3590,10 @@ export function CrudDashboard({
       return;
     }
 
-    await updateRow(
-      activeEntity,
-      Number(selectedRow.id),
+    await updateRowMutation.mutateAsync({
+      id: Number(selectedRow.id),
       values,
-      activeCourse,
-      activeCohort ?? undefined,
-    );
-    await refreshRows();
+    });
     void navigate({
       to: dashboardPath({
         courseSlug: activeCourse.slug,
@@ -3502,22 +3613,17 @@ export function CrudDashboard({
     existingRecord?: CrudRow,
   ) {
     if (existingRecord?.id !== undefined && existingRecord.id !== null) {
-      await updateRow(
-        activeEntity,
-        Number(existingRecord.id),
-        { status },
-        activeCourse,
-        activeCohort ?? undefined,
-      );
+      await updateRowMutation.mutateAsync({
+        id: Number(existingRecord.id),
+        values: { status },
+      });
     } else {
-      await createRow(activeEntity, {
+      await createRowMutation.mutateAsync({
         studentId,
         attendanceSessionId: sessionId,
         status,
-      }, activeCourse, activeCohort ?? undefined);
+      });
     }
-
-    await refreshRows();
   }
 
   function handleRelationDetail(field: FieldDefinition, row: CrudRow) {
@@ -3579,6 +3685,13 @@ export function CrudDashboard({
     });
   }
 
+  const shouldShowRowsTable =
+    !attendanceTaking &&
+    !attendanceCharts &&
+    activeEntityKey !== "points" &&
+    mode !== "create" &&
+    mode !== "edit";
+
   return (
     <div className="min-w-0 space-y-4 sm:space-y-6">
       <div className="relative z-50 flex min-w-0 items-start justify-between gap-3 px-1 xl:pr-80">
@@ -3605,10 +3718,7 @@ export function CrudDashboard({
             activeCohort={activeCohort}
             activeCourse={activeCourse}
             activeSchema={activeSchema}
-            onImported={async () => {
-              await refreshRows();
-              await refreshRelationOptions();
-            }}
+            onImported={invalidateDashboardQueries}
           />
           {topAccessory}
         </div>
@@ -3618,14 +3728,15 @@ export function CrudDashboard({
         activeEntityId={activeEntity.id}
         activeSchema={activeSchema}
         entityDefinitions={entityDefinitions}
+        getEntityPath={(entityId) =>
+          dashboardPath({
+            courseSlug: activeCourse.slug,
+            cohortTag: activeCohort?.tag,
+            entity: getEntityKey(entityId),
+          })
+        }
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        onSelect={(entityId) => {
-          navigateDashboard({
-            entity: getEntityKey(entityId),
-            search: {},
-          });
-        }}
         onSelectAttendanceTaking={() => {
           void navigate({
             to: dashboardPath({
@@ -3674,10 +3785,7 @@ export function CrudDashboard({
                 search: {},
               })
             }
-            onCreated={async () => {
-              await refreshRows();
-              await refreshRelationOptions();
-            }}
+            onCreated={invalidateDashboardQueries}
             relationOptions={relationOptions}
           />
         ) : null}
@@ -3713,10 +3821,7 @@ export function CrudDashboard({
             activeCourse={activeCourse}
             activeSchema={activeSchema}
             entityDefinitions={entityDefinitions}
-            onCreated={async () => {
-              await refreshRows();
-              await refreshRelationOptions();
-            }}
+            onCreated={invalidateDashboardQueries}
             relationOptions={relationOptions}
           />
         ) : null}
@@ -3818,17 +3923,17 @@ export function CrudDashboard({
           />
         ) : null}
 
-        {!attendanceTaking && !attendanceCharts && activeEntityKey !== "points" ? (
+        {shouldShowRowsTable ? (
         <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
           <div
-            className="space-y-2 border-b border-slate-200/80 px-3 py-2.5"
+            className="space-y-2 border-b border-slate-200/80 px-2 py-2.5 sm:px-3"
             data-onboarding="dashboard-table-tools"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 text-right">
                 <h2 className="text-base font-bold text-ink sm:text-lg">{activeEntity.label}</h2>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {ui.showing} {filteredRows.length} {ui.from} {rows.length}
+                  {ui.showing} {tableRows.length} {ui.from} {rows.length}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
@@ -3881,153 +3986,254 @@ export function CrudDashboard({
             </p>
           ) : rows.length === 0 ? (
             <p className="p-4 text-sm text-slate-600 sm:p-5">{ui.noRecords}</p>
-          ) : filteredRows.length === 0 ? (
+          ) : tableRows.length === 0 ? (
             <p className="p-4 text-sm text-slate-600 sm:p-5">{ui.noMatches}</p>
           ) : (
             <>
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed divide-y divide-slate-200 text-right text-xs sm:text-sm">
-                <thead className="bg-mist/70">
-                  <tr>
-                    {["groups", "students", "teachers"].includes(activeEntityKey) ? (
-                      <th className="w-8 px-1.5 py-1 font-bold text-slate-600 sm:px-2">
-                        <span className="sr-only">ظ„ظˆظ† ط§ظ„ظ…ط¬ظ…ظˆط¹ط©</span>
-                      </th>
-                    ) : null}
-                    {activeEntity.listFields.map((key) => (
-                      <th className="break-words px-1.5 py-1 font-bold leading-5 text-slate-600 sm:px-2" key={key}>
-                        {getField(activeEntity, key)?.label ?? key}
-                      </th>
-                    ))}
-                    <th className="w-24 px-1.5 py-1 font-bold text-slate-600 sm:w-28 sm:px-2">
-                      {ui.actions}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredRows.map((row) => {
-                    const groupRow = getGroupRowForRecord(
-                      activeEntityKey,
-                      row,
-                      activeSchema,
-                      relationOptions,
-                    );
-                    const groupColor = getGroupColorByCode(groupRow?.colorCode);
-                    const showsGroupColorColumn = [
-                      "groups",
-                      "students",
-                      "teachers",
-                    ].includes(activeEntityKey);
-
-                    return (
-                      <tr
-                        className={`transition ${groupColor?.row ?? "hover:bg-cedar/5"}`}
-                        key={String(row.id)}
-                        style={groupColor?.style}
-                      >
-                        {showsGroupColorColumn ? (
-                          <td className="px-1.5 py-1 sm:px-2">
-                            {groupColor ? (
-                              <span
-                                className={`mx-auto block h-6 w-1.5 rounded-full ${groupColor.marker}`}
-                                style={groupColor.style}
-                              />
-                            ) : null}
-                          </td>
-                        ) : null}
-                        {activeEntity.listFields.map((key) => {
-                          const field = getField(activeEntity, key);
-                          const isStudentGroup =
-                            activeEntityKey === "students" && key === "groupId";
-                          const isGroupName =
-                            activeEntityKey === "groups" && key === "name";
-                          const isGroupColor =
-                            activeEntityKey === "groups" && key === "colorCode";
-                          const value = formatFieldValue(
-                            field,
-                            row[key],
-                            relationOptions,
-                            entityDefinitions,
-                          );
-
-                          return (
-                            <td
-                              className="break-words px-1.5 py-1 leading-5 text-slate-700 sm:px-2"
-                              key={key}
-                            >
-                              {isGroupColor ? (
-                                <span
-                                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
-                                  style={groupColor?.style}
-                                >
-                                  <span
-                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
-                                    style={groupColor?.style}
-                                  />
-                                  <span className="min-w-0 truncate">{value}</span>
-                                </span>
-                              ) : isStudentGroup && field?.relation ? (
-                                <button
-                                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold transition hover:shadow-sm sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
-                                  onClick={() => handleRelationDetail(field, row)}
-                                  style={groupColor?.style}
-                                  type="button"
-                                >
-                                  <span
-                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
-                                    style={groupColor?.style}
-                                  />
-                                  <span className="min-w-0 truncate">{value}</span>
-                                </button>
-                              ) : isGroupName ? (
-                                <span
-                                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
-                                  style={groupColor?.style}
-                                >
-                                  <span
-                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
-                                    style={groupColor?.style}
-                                  />
-                                  <span className="min-w-0 truncate">{value}</span>
-                                </span>
-                              ) : (
-                                value
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="px-1.5 py-1 sm:px-2">
-                          <div className="flex gap-1">
-                            <ActionButton compact icon={Eye} label={ui.view} onClick={() => {
-                              navigateDashboard({
-                                mode: "detail",
-                                rowId: row.id,
-                              });
-                            }} />
-                            {activeEntityKey !== "attendanceRecords" ? (
-                              <>
-                                <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => {
-                                  navigateDashboard({
-                                    mode: "edit",
-                                    rowId: row.id,
-                                  });
-                                }} />
-                                <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => void handleSoftDelete(row)} />
-                              </>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <CrudRowsTable
+              activeEntity={activeEntity}
+              activeEntityKey={activeEntityKey}
+              activeSchema={activeSchema}
+              entityDefinitions={entityDefinitions}
+              onDelete={(row) => void handleSoftDelete(row)}
+              onEdit={(row) =>
+                navigateDashboard({
+                  mode: "edit",
+                  rowId: row.id,
+                })
+              }
+              onRelationDetail={handleRelationDetail}
+              onView={(row) =>
+                navigateDashboard({
+                  mode: "detail",
+                  rowId: row.id,
+                })
+              }
+              relationOptions={relationOptions}
+              rows={tableRows}
+            />
             </>
           )}
         </div>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function CrudRowsTable({
+  activeEntity,
+  activeEntityKey,
+  activeSchema,
+  entityDefinitions,
+  onDelete,
+  onEdit,
+  onRelationDetail,
+  onView,
+  relationOptions,
+  rows,
+}: {
+  activeEntity: EntityDefinition;
+  activeEntityKey: EntityKey;
+  activeSchema: SchemaName;
+  entityDefinitions: EntityDefinition[];
+  onDelete: (row: CrudRow) => void;
+  onEdit: (row: CrudRow) => void;
+  onRelationDetail: (field: FieldDefinition, row: CrudRow) => void;
+  onView: (row: CrudRow) => void;
+  relationOptions: RelationOptions;
+  rows: CrudRow[];
+}) {
+  const showsGroupColorColumn = ["groups", "students", "teachers"].includes(activeEntityKey);
+  const columns = useMemo<ColumnDef<CrudRow>[]>(
+    () => [
+      ...(showsGroupColorColumn
+        ? [
+            {
+              id: "groupColor",
+              header: () => <span className="sr-only">لون المجموعة</span>,
+              cell: ({ row }) => {
+                const groupRow = getGroupRowForRecord(
+                  activeEntityKey,
+                  row.original,
+                  activeSchema,
+                  relationOptions,
+                );
+                const groupColor = getGroupColorByCode(groupRow?.colorCode);
+
+                return groupColor ? (
+                  <span
+                    className={`mx-auto block h-6 w-1.5 rounded-full ${groupColor.marker}`}
+                    style={groupColor.style}
+                  />
+                ) : null;
+              },
+            } satisfies ColumnDef<CrudRow>,
+          ]
+        : []),
+      ...activeEntity.listFields.map(
+        (key): ColumnDef<CrudRow> => ({
+          id: key,
+          header: () => getField(activeEntity, key)?.label ?? key,
+          cell: ({ row }) => {
+            const field = getField(activeEntity, key);
+            const groupRow = getGroupRowForRecord(
+              activeEntityKey,
+              row.original,
+              activeSchema,
+              relationOptions,
+            );
+            const groupColor = getGroupColorByCode(groupRow?.colorCode);
+            const isStudentGroup = activeEntityKey === "students" && key === "groupId";
+            const isGroupName = activeEntityKey === "groups" && key === "name";
+            const isGroupColor = activeEntityKey === "groups" && key === "colorCode";
+            const isPageRange = activeEntityKey === "pages" && key === "page";
+            const value = formatFieldValue(
+              field,
+              row.original[key],
+              relationOptions,
+              entityDefinitions,
+            );
+
+            if (isGroupColor || isGroupName) {
+              return (
+                <span
+                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                  style={groupColor?.style}
+                >
+                  <span
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
+                    style={groupColor?.style}
+                  />
+                  <span className="min-w-0 truncate">{value}</span>
+                </span>
+              );
+            }
+
+            if (isStudentGroup && field?.relation) {
+              return (
+                <button
+                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold transition hover:shadow-sm sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                  onClick={() => onRelationDetail(field, row.original)}
+                  style={groupColor?.style}
+                  type="button"
+                >
+                  <span
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
+                    style={groupColor?.style}
+                  />
+                  <span className="min-w-0 truncate">{value}</span>
+                </button>
+              );
+            }
+
+            if (isPageRange) {
+              return <span className="whitespace-nowrap font-semibold text-ink">{value}</span>;
+            }
+
+            return value;
+          },
+        }),
+      ),
+      {
+        id: "actions",
+        header: () => ui.actions,
+        cell: ({ row }) => {
+          if (row.original.isGroupedPageRow) {
+            return (
+              <span className="inline-flex whitespace-nowrap rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
+                ملخص
+              </span>
+            );
+          }
+
+          return (
+            <div className="flex gap-1">
+              <ActionButton compact icon={Eye} label={ui.view} onClick={() => onView(row.original)} />
+              {activeEntityKey !== "attendanceRecords" ? (
+                <>
+                  <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => onEdit(row.original)} />
+                  <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => onDelete(row.original)} />
+                </>
+              ) : null}
+            </div>
+          );
+        },
+      },
+    ],
+    [
+      activeEntity,
+      activeEntityKey,
+      activeSchema,
+      entityDefinitions,
+      onDelete,
+      onEdit,
+      onRelationDetail,
+      onView,
+      relationOptions,
+      showsGroupColorColumn,
+    ],
+  );
+  const table = useReactTable({
+    columns,
+    data: rows,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full table-fixed divide-y divide-slate-200 text-right text-xs sm:text-sm">
+        <thead className="bg-mist/70">
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <th
+                  className={`break-words px-0.5 py-1 font-bold leading-5 text-slate-600 sm:px-1 ${
+                    header.column.id === "groupColor"
+                      ? "w-8"
+                      : header.column.id === "actions"
+                        ? "w-24 sm:w-28"
+                        : ""
+                  }`}
+                  key={header.id}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {table.getRowModel().rows.map((row) => {
+            const groupRow = getGroupRowForRecord(
+              activeEntityKey,
+              row.original,
+              activeSchema,
+              relationOptions,
+            );
+            const groupColor = getGroupColorByCode(groupRow?.colorCode);
+
+            return (
+              <tr
+                className={`transition ${groupColor?.row ?? "hover:bg-cedar/5"}`}
+                key={row.id}
+                style={groupColor?.style}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td
+                    className="break-words px-0.5 py-1 leading-5 text-slate-700 sm:px-1"
+                    key={cell.id}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

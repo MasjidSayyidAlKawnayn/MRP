@@ -3,12 +3,9 @@ import type { CrudRow, CrudValue } from "./dataTypes";
 
 export function getEditableFields(
   entity: EntityDefinition,
-  mode: "create" | "edit",
+  _mode: "create" | "edit",
 ) {
-  const blockedKeys =
-    mode === "create"
-      ? new Set(["id", "createdAt", "updatedAt", "deletedAt"])
-      : new Set(["id", "createdAt", "deletedAt"]);
+  const blockedKeys = new Set(["id", "createdAt", "updatedAt", "deletedAt"]);
 
   return entity.fields.filter(
     (field) => !field.readOnly && !blockedKeys.has(field.key),

@@ -2,11 +2,8 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  redirect,
 } from "@tanstack/react-router";
 import App from "./App";
-import type { EntityKey } from "./crud/entities";
-import { dashboardPath } from "./routing";
 
 const rootRoute = createRootRoute({
   component: App,
@@ -15,12 +12,6 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({
-      to: "/home",
-      replace: true,
-    });
-  },
 });
 
 const homeRoute = createRoute({
@@ -86,20 +77,6 @@ const editRoute = createRoute({
   path: "/courses/$courseSlug/dashboard/$entity/$rowId/edit",
 });
 
-const legacyDashboardRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard/$schema/$entity",
-  beforeLoad: ({ params }) => {
-    throw redirect({
-      to: dashboardPath({
-        courseSlug: params.schema === "mqs" ? "default" : params.schema,
-        entity: params.entity as EntityKey,
-      }),
-      replace: true,
-    });
-  },
-});
-
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/profile",
@@ -108,6 +85,11 @@ const profileRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
+});
+
+const logoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/logout",
 });
 
 const coursesRoute = createRoute({
@@ -143,12 +125,6 @@ const authRoute = createRoute({
 const fallbackRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "$",
-  beforeLoad: () => {
-    throw redirect({
-      to: "/home",
-      replace: true,
-    });
-  },
 });
 
 export const router = createRouter({
@@ -169,9 +145,9 @@ export const router = createRouter({
     createRoutePage,
     detailRoute,
     editRoute,
-    legacyDashboardRoute,
     profileRoute,
     settingsRoute,
+    logoutRoute,
     coursesRoute,
     courseCreateRoute,
     courseDetailRoute,
