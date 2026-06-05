@@ -65,7 +65,10 @@ const checklistItemIds: OnboardingChecklistItemId[] = [
 const tourIds: OnboardingTourId[] = ["daily-tour", "setup-tour"];
 const phaseIds: OnboardingPhase[] = ["daily", "setup"];
 
-function uniqueKnownValues<T extends string>(values: unknown, knownValues: readonly T[]) {
+function uniqueKnownValues<T extends string>(
+  values: unknown,
+  knownValues: readonly T[],
+) {
   if (!Array.isArray(values)) {
     return [];
   }
@@ -156,7 +159,7 @@ export function buildOnboardingChecklist(
         id: "setup-students",
         autoCompleted: facts.studentCount > 0,
         title: "إضافة الطلاب أو استيرادهم",
-        description: "أدخل الطلاب يدويًا أو استخدم زر الاستيراد عند توفر ملف.",
+        description: "أدخل الطلاب يدويا أو استخدم الاستيراد عند توفر ملف.",
       },
       {
         id: "setup-teachers",
@@ -168,7 +171,7 @@ export function buildOnboardingChecklist(
         id: "setup-attendance",
         autoCompleted: facts.attendanceRecordCount > 0,
         title: "تسجيل أول حضور",
-        description: "جرّب صفحة أخذ الحضور لتأكيد أن سير العمل جاهز.",
+        description: "جرّب صفحة أخذ الحضور للتأكد أن سير العمل جاهز.",
       },
     ];
   }
