@@ -9,6 +9,7 @@ import {
 
 export type WorkspacePage =
   | "home"
+  | "logout"
   | "courseCreate"
   | "courseDelete"
   | "courseDetail"
@@ -117,28 +118,6 @@ export function coursePath({
   }
 
   return `/courses/${courseSlug}`;
-}
-
-export function legacyDashboardPath({
-  schema,
-  entity,
-  mode,
-  rowId,
-  subpage,
-}: {
-  schema: SchemaName;
-  entity: EntityKey;
-  mode?: ViewMode;
-  rowId?: CrudValue;
-  subpage?: "manual" | "take" | "charts";
-}) {
-  return dashboardPath({
-    courseSlug: schema === "mqs" ? "default" : schema,
-    entity,
-    mode,
-    rowId,
-    subpage,
-  });
 }
 
 export function encodeDraft(values: DraftValues) {

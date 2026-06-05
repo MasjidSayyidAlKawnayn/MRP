@@ -36,6 +36,18 @@ bun run build
 bun run preview
 ```
 
+To sync this fork with the source repository, run:
+
+```bash
+./scripts/sync-fork.sh
+```
+
+The script fetches `upstream`, fast-forwards the current branch from the matching `upstream/<branch>`, then pushes the updated branch to `origin`. Pass a branch name if you want to sync a branch other than the current one:
+
+```bash
+./scripts/sync-fork.sh main
+```
+
 ## Data layer
 
 Runtime Neon configuration and client setup live in `src/data/neon.ts`. CRUD table metadata lives in `src/crud/entities.ts`, while database operations are split into focused repository modules under `src/crud/`. See `src/data/README.md` before adding a new table or changing schema behavior.

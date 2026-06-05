@@ -4,6 +4,14 @@ import { applyCoursePayload, toAppRow, toDbPayload } from "./dataMappers";
 import type { EntityDefinition } from "./entities";
 import type { Cohort, Course, CrudValue } from "./dataTypes";
 
+const systemManagedKeys = new Set(["id", "createdAt", "updatedAt", "deletedAt"]);
+
+function omitSystemManagedValues(values: Record<string, CrudValue>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(([key]) => !systemManagedKeys.has(key)),
+  );
+}
+
 export async function listRows(
   entity: EntityDefinition,
   course?: Course,
@@ -66,7 +74,14 @@ export async function createRow(
   const client = getSchemaClient(entity.schema);
   const response = await client
     .from(entity.table)
-    .insert(applyCoursePayload(entity, toDbPayload(entity, values), course, cohort))
+    .insert(
+      applyCoursePayload(
+        entity,
+        toDbPayload(entity, omitSystemManagedValues(values)),
+        course,
+        cohort,
+      ),
+    )
     .select()
     .single();
 
@@ -91,7 +106,12 @@ export async function createRows(
     .from(entity.table)
     .insert(
       values.map((value) =>
-        applyCoursePayload(entity, toDbPayload(entity, value), course, cohort),
+        applyCoursePayload(
+          entity,
+          toDbPayload(entity, omitSystemManagedValues(value)),
+          course,
+          cohort,
+        ),
       ),
     )
     .select();
@@ -116,7 +136,7 @@ export async function updateRow(
       applyCoursePayload(
         entity,
         toDbPayload(entity, {
-          ...values,
+          ...omitSystemManagedValues(values),
           updatedAt: new Date().toISOString(),
         }),
         course,

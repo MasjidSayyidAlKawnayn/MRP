@@ -77,6 +77,16 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
     };
   }
 
+  if (matchRoute({ to: "/logout", fuzzy: false })) {
+    return {
+      courseSlug: DEFAULT_COURSE_SLUG,
+      entity: getDefaultEntityKey(appSchema),
+      mode: "list",
+      page: "logout",
+      search,
+    };
+  }
+
   if (matchRoute({ to: "/courses", fuzzy: false })) {
     return {
       courseSlug: DEFAULT_COURSE_SLUG,
@@ -198,6 +208,28 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
     };
   }
 
+  const cohortDashboardCreate = matchRoute({
+    to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/new",
+    fuzzy: false,
+  });
+  if (cohortDashboardCreate) {
+    const entity = validateEntityKey(appSchema, cohortDashboardCreate.entity);
+    return {
+      canonicalPath: dashboardPath({
+        cohortTag: cohortDashboardCreate.cohortTag,
+        courseSlug: cohortDashboardCreate.courseSlug,
+        entity,
+        mode: "create",
+      }),
+      cohortTag: cohortDashboardCreate.cohortTag,
+      courseSlug: cohortDashboardCreate.courseSlug,
+      entity,
+      mode: "create",
+      page: "dashboard",
+      search,
+    };
+  }
+
   const cohortDashboardDetail = matchRoute({
     to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/$rowId",
     fuzzy: false,
@@ -218,28 +250,6 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
       mode: "detail",
       page: "dashboard",
       rowId: decodeURIComponent(cohortDashboardDetail.rowId),
-      search,
-    };
-  }
-
-  const cohortDashboardCreate = matchRoute({
-    to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/new",
-    fuzzy: false,
-  });
-  if (cohortDashboardCreate) {
-    const entity = validateEntityKey(appSchema, cohortDashboardCreate.entity);
-    return {
-      canonicalPath: dashboardPath({
-        cohortTag: cohortDashboardCreate.cohortTag,
-        courseSlug: cohortDashboardCreate.courseSlug,
-        entity,
-        mode: "create",
-      }),
-      cohortTag: cohortDashboardCreate.cohortTag,
-      courseSlug: cohortDashboardCreate.courseSlug,
-      entity,
-      mode: "create",
-      page: "dashboard",
       search,
     };
   }
@@ -347,6 +357,26 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
     };
   }
 
+  const dashboardCreate = matchRoute({
+    to: "/courses/$courseSlug/dashboard/$entity/new",
+    fuzzy: false,
+  });
+  if (dashboardCreate) {
+    const entity = validateEntityKey(appSchema, dashboardCreate.entity);
+    return {
+      canonicalPath: dashboardPath({
+        courseSlug: dashboardCreate.courseSlug,
+        entity,
+        mode: "create",
+      }),
+      courseSlug: dashboardCreate.courseSlug,
+      entity,
+      mode: resolveDashboardMode(undefined, false, true),
+      page: "dashboard",
+      search,
+    };
+  }
+
   const dashboardDetail = matchRoute({
     to: "/courses/$courseSlug/dashboard/$entity/$rowId",
     fuzzy: false,
@@ -365,26 +395,6 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
       mode: resolveDashboardMode(dashboardDetail.rowId, false, false),
       page: "dashboard",
       rowId: decodeURIComponent(dashboardDetail.rowId),
-      search,
-    };
-  }
-
-  const dashboardCreate = matchRoute({
-    to: "/courses/$courseSlug/dashboard/$entity/new",
-    fuzzy: false,
-  });
-  if (dashboardCreate) {
-    const entity = validateEntityKey(appSchema, dashboardCreate.entity);
-    return {
-      canonicalPath: dashboardPath({
-        courseSlug: dashboardCreate.courseSlug,
-        entity,
-        mode: "create",
-      }),
-      courseSlug: dashboardCreate.courseSlug,
-      entity,
-      mode: resolveDashboardMode(undefined, false, true),
-      page: "dashboard",
       search,
     };
   }

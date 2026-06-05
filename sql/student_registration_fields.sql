@@ -4,7 +4,7 @@ create schema if not exists mqs;
 
 alter table mqs.students
   add column if not exists father_name text,
-  add column if not exists school_year text,
+  add column if not exists school_year integer,
   add column if not exists residence text,
   add column if not exists transport_required boolean not null default false,
   add column if not exists registration_submitted_at timestamptz;

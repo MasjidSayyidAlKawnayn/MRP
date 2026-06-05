@@ -76,6 +76,7 @@ const timestamps: FieldDefinition[] = [
     column: "updated_at",
     label: "Updated at",
     type: "datetime",
+    readOnly: true,
   },
   {
     key: "deletedAt",
@@ -251,9 +252,18 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         key: "schoolYear",
         column: "school_year",
         label: "School year",
-        type: "text",
+        type: "number",
+        min: 1,
       },
       { key: "phone", column: "phone", label: "Phone", type: "text" },
+      {
+        key: "primaryParentPhone",
+        column: "primary_parent_phone",
+        label: "Primary parent phone",
+        type: "text",
+        helpText:
+          "Default parent or guardian number for routine updates; use this before contacting both parents.",
+      },
       {
         key: "fatherPhone",
         column: "father_phone",
@@ -899,6 +909,7 @@ const arabicFieldLabels: Record<string, string> = {
   minPages: "\u0623\u0642\u0644 \u0639\u062F\u062F \u0635\u0641\u062D\u0627\u062A",
   maxPages: "\u0623\u0643\u0628\u0631 \u0639\u062F\u062F \u0635\u0641\u062D\u0627\u062A",
   phone: "\u0627\u0644\u0647\u0627\u062A\u0641",
+  primaryParentPhone: "\u0647\u0627\u062A\u0641 \u0627\u0644\u0648\u0644\u064A \u0627\u0644\u0623\u0633\u0627\u0633\u064A",
   phoneNumber: "\u0631\u0642\u0645 \u0627\u0644\u0647\u0627\u062A\u0641",
   reminderSent:
     "\u062A\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u062A\u0630\u0643\u064A\u0631",
@@ -917,6 +928,8 @@ const arabicHelpText: Record<string, string> = {
   group:
     "\u0643\u0644 \u0645\u0639\u0644\u0645 \u064A\u0634\u0631\u0641 \u0639\u0644\u0649 \u0645\u062C\u0645\u0648\u0639\u0629 \u0648\u0627\u062D\u062F\u0629.",
   page: "\u0631\u0642\u0645 \u0635\u0641\u062D\u0629 \u0627\u0644\u0642\u0631\u0622\u0646 \u0645\u0646 1 \u0625\u0644\u0649 604.",
+  primaryParentPhone:
+    "\u0631\u0642\u0645 \u0627\u0644\u0648\u0644\u064A \u0627\u0644\u0623\u0633\u0627\u0633\u064A \u0644\u0644\u062A\u0648\u0627\u0635\u0644 \u0627\u0644\u064A\u0648\u0645\u064A\u060C \u0642\u0628\u0644 \u0627\u0644\u062A\u0648\u0627\u0635\u0644 \u0645\u0639 \u0643\u0644\u0627 \u0627\u0644\u0648\u0627\u0644\u062F\u064A\u0646.",
   sequenceOnDate:
     "\u064A\u0633\u062A\u062E\u062F\u0645 \u0639\u0646\u062F \u0648\u062C\u0648\u062F \u0623\u0643\u062B\u0631 \u0645\u0646 \u0639\u0645\u0648\u062F \u062D\u0636\u0648\u0631 \u0641\u064A \u0627\u0644\u064A\u0648\u0645 \u0646\u0641\u0633\u0647.",
   status: "\u0627\u0633\u062A\u062E\u062F\u0645 \u062D\u0627\u0636\u0631 \u0623\u0648 \u0645\u062A\u0623\u062E\u0631.",

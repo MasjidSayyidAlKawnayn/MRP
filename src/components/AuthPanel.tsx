@@ -4,6 +4,7 @@ import {
   SignedOut,
 } from "@neondatabase/neon-js/auth/react/ui";
 import type { AuthLocalization } from "@neondatabase/neon-js/auth/react/ui";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -41,14 +42,11 @@ import {
   listCohorts,
   listCourses,
   listRows,
-  type Cohort,
-  type Course,
 } from "../crud/data";
 import { findEntityDefinition, getEntityDefinitions } from "../crud/entities";
 import {
   dashboardPath,
   getDefaultEntityKey,
-  type RouteSearch,
 } from "../routing";
 import { OnboardingProvider, useOnboarding } from "../onboarding/OnboardingProvider";
 import { OnboardingChecklist } from "../onboarding/OnboardingChecklist";
@@ -58,6 +56,7 @@ import {
   type WorkspaceOnboardingFacts,
 } from "../onboarding/state";
 import { Button } from "./ui/button";
+import { queryKeys } from "../features/query/keys";
 import {
   useWorkspaceRouteState,
   type WorkspaceRouteState,
@@ -86,6 +85,13 @@ const text = {
   settings: "\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A",
   tutorial: "\u0627\u0644\u0634\u0631\u062D",
   resetTutorial: "\u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0634\u0631\u062D",
+  logoutTitle: "\u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062E\u0631\u0648\u062C \u0645\u0646 \u0627\u0644\u0645\u0646\u0635\u0629",
+  logoutBody:
+    "\u0646\u064F\u0646\u0647\u064A \u062C\u0644\u0633\u062A\u0643 \u0627\u0644\u0622\u0646 \u0648\u0646\u0639\u064A\u062F\u0643 \u0625\u0644\u0649 \u0635\u0641\u062D\u0629 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644.",
+  logoutSignedOut:
+    "\u062A\u0645 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062E\u0631\u0648\u062C \u0628\u0646\u062C\u0627\u062D. \u064A\u0645\u0643\u0646\u0643 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0645\u0631\u0629 \u0623\u062E\u0631\u0649 \u0641\u064A \u0623\u064A \u0648\u0642\u062A.",
+  logoutRetry: "\u0645\u062D\u0627\u0648\u0644\u0629 \u0627\u0644\u062E\u0631\u0648\u062C \u0645\u062C\u062F\u062F\u0627\u064B",
+  backToHome: "\u0627\u0644\u0639\u0648\u062F\u0629 \u0625\u0644\u0649 \u0627\u0644\u0631\u0626\u064A\u0633\u064A\u0629",
   profileTitle: "\u0645\u0644\u0641 \u0627\u0644\u062D\u0633\u0627\u0628",
   profileBody:
     "\u062A\u0641\u0627\u0635\u064A\u0644 \u0627\u0644\u0647\u0648\u064A\u0629 \u0648\u0627\u0644\u062C\u0644\u0633\u0629 \u0648\u0635\u0644\u0627\u062D\u064A\u0629 \u0627\u0644\u0648\u0635\u0648\u0644.",
@@ -198,6 +204,101 @@ function getCourseLoadErrorMessage(caughtError: unknown) {
   return message;
 }
 
+function LogoutPage() {
+  const {
+    isAuthenticated,
+    isSigningOut,
+    signOut,
+    signOutError,
+  } = useAuth();
+  const hasRequestedSignOut = useRef(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || isSigningOut || hasRequestedSignOut.current) {
+      return;
+    }
+
+    hasRequestedSignOut.current = true;
+    void signOut().catch(() => {
+      hasRequestedSignOut.current = false;
+    });
+  }, [isAuthenticated, isSigningOut, signOut]);
+
+  return (
+    <section className="mx-auto flex min-h-[calc(100vh-6rem)] max-w-2xl items-center justify-center">
+      <div className="w-full rounded-[1.75rem] border border-white/80 bg-white/92 p-6 text-right shadow-2xl shadow-cedar/10 backdrop-blur sm:p-8">
+        <div className="inline-flex items-center gap-2 rounded-full bg-cedar/10 px-3 py-2 text-xs font-bold text-cedar">
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          <span>{text.signOut}</span>
+        </div>
+        <h1 className="mt-4 text-2xl font-bold text-ink sm:text-3xl">
+          {text.logoutTitle}
+        </h1>
+        <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+          {isAuthenticated ? text.logoutBody : text.logoutSignedOut}
+        </p>
+
+        {signOutError ? (
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+            {signOutError}
+          </p>
+        ) : null}
+
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          {isAuthenticated ? (
+            <Button
+              disabled={isSigningOut}
+              onClick={() => void signOut().catch(() => undefined)}
+              type="button"
+            >
+              {isSigningOut ? text.signingOut : text.logoutRetry}
+            </Button>
+          ) : null}
+          <Button
+            onClick={() => {
+              window.location.assign(import.meta.env.BASE_URL);
+            }}
+            type="button"
+            variant={isAuthenticated ? "outline" : "default"}
+          >
+            {text.backToHome}
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LogoutButton({
+  className,
+  variant = "outline",
+}: {
+  className?: string;
+  variant?: "default" | "outline";
+}) {
+  const { isSigningOut, signOut, signOutError } = useAuth();
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <Button
+        className={className}
+        disabled={isSigningOut}
+        onClick={() => void signOut().catch(() => undefined)}
+        type="button"
+        variant={variant}
+      >
+        <LogOut className="h-4 w-4" aria-hidden="true" />
+        <span>{isSigningOut ? text.signingOut : text.signOut}</span>
+      </Button>
+      {signOutError ? (
+        <p className="text-right text-xs leading-5 text-amber-800">
+          {signOutError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function UserSummary() {
   const {
     email,
@@ -282,7 +383,7 @@ function AccountControls({
   courseSlug: string;
   tutorialPhase: OnboardingPhase;
 }) {
-  const { email, image, isSigningOut, name, signOut, signOutError } = useAuth();
+  const { email, image, name, signOutError } = useAuth();
   const { openTour, resetOnboarding } = useOnboarding();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
@@ -443,12 +544,14 @@ function AccountControls({
           </button>
           <button
             className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-cedar/5 hover:text-cedar disabled:opacity-60"
-            disabled={isSigningOut}
-            onClick={() => void signOut().catch(() => undefined)}
+            onClick={() => {
+              setIsOpen(false);
+              void navigate({ to: "/logout" });
+            }}
             role="menuitem"
             type="button"
           >
-            <span>{isSigningOut ? text.signingOut : text.signOut}</span>
+            <span>{text.signOut}</span>
             <LogOut className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
@@ -465,24 +568,12 @@ function AccountControls({
 
 export function AuthPanel({ appName }: { appName: string }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { sessionId } = useAuth();
   const routeState = useWorkspaceRouteState();
 
-  useEffect(() => {
-    if (
-      (location.pathname.startsWith("/dashboard") ||
-        location.pathname.startsWith("/courses")) &&
-      routeState.canonicalPath &&
-      location.pathname !== routeState.canonicalPath
-    ) {
-      void navigate({
-        to: routeState.canonicalPath,
-        replace: true,
-        search: location.search as RouteSearch,
-      });
-    }
-  }, [location.pathname, location.search, navigate, routeState.canonicalPath]);
+  if (routeState.page === "logout") {
+    return <LogoutPage />;
+  }
 
   return (
     <>
@@ -590,17 +681,14 @@ function SignedInWorkspace({
 }) {
   const { hasAdminUiAccess, isLoading } = useAuth();
   const navigate = useNavigate();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [cohorts, setCohorts] = useState<Cohort[]>([]);
-  const [coursesError, setCoursesError] = useState<string | null>(null);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(true);
-  const [workspaceFacts, setWorkspaceFacts] = useState<WorkspaceOnboardingFacts>(
-    () => createWorkspaceFacts(),
-  );
+  const queryClient = useQueryClient();
+  const coursesQuery = useQuery({
+    queryKey: queryKeys.courses(),
+    queryFn: () => listCourses({ includeInactive: true }),
+  });
+  const courses = coursesQuery.data ?? [];
   const selectedCourse =
     courses.find((course) => course.slug === routeState.courseSlug) ?? null;
-  const activeCohort =
-    cohorts.find((cohort) => cohort.tag === routeState.cohortTag) ?? cohorts[0] ?? null;
   const isFocusedCoursePage = [
     "courseDelete",
     "courseDetail",
@@ -608,6 +696,14 @@ function SignedInWorkspace({
   ].includes(routeState.page);
   const activeCourse =
     isFocusedCoursePage ? selectedCourse : (selectedCourse ?? courses[0] ?? null);
+  const cohortsQuery = useQuery({
+    enabled: Boolean(activeCourse),
+    queryKey: queryKeys.cohorts(activeCourse?.id),
+    queryFn: () => listCohorts(activeCourse!.id),
+  });
+  const cohorts = cohortsQuery.data ?? [];
+  const activeCohort =
+    cohorts.find((cohort) => cohort.tag === routeState.cohortTag) ?? cohorts[0] ?? null;
   const [homeCourseSlug, setHomeCourseSlug] = useState(activeCourse?.slug ?? "default");
   const homeCourse =
     courses.find((course) => course.slug === homeCourseSlug) ??
@@ -616,6 +712,57 @@ function SignedInWorkspace({
     null;
   const defaultEntity = getDefaultEntityKey(appSchema);
   const entityDefinitions = getEntityDefinitions(appSchema);
+  const workspaceFactsQuery = useQuery({
+    enabled: Boolean(activeCourse),
+    queryKey: queryKeys.workspaceFacts(activeCourse?.id, activeCohort?.id),
+    queryFn: async () => {
+      if (!activeCourse) {
+        return createWorkspaceFacts({ courseCount: courses.length });
+      }
+
+      const studentsEntity = findEntityDefinition(
+        `${appSchema}.students`,
+        entityDefinitions,
+      );
+      const groupsEntity = findEntityDefinition(
+        `${appSchema}.groups`,
+        entityDefinitions,
+      );
+      const teachersEntity = findEntityDefinition(
+        `${appSchema}.teachers`,
+        entityDefinitions,
+      );
+      const attendanceEntity = findEntityDefinition(
+        `${appSchema}.attendanceRecords`,
+        entityDefinitions,
+      );
+
+      if (!studentsEntity || !groupsEntity || !teachersEntity || !attendanceEntity) {
+        return createWorkspaceFacts({ courseCount: courses.length });
+      }
+
+      try {
+        const [students, groups, teachers, attendanceRecords] = await Promise.all([
+          listRows(studentsEntity, activeCourse, activeCohort ?? undefined),
+          listRows(groupsEntity, activeCourse, activeCohort ?? undefined),
+          listRows(teachersEntity, activeCourse, activeCohort ?? undefined),
+          listRows(attendanceEntity, activeCourse, activeCohort ?? undefined),
+        ]);
+
+        return createWorkspaceFacts({
+          attendanceRecordCount: attendanceRecords.length,
+          courseCount: courses.length,
+          groupCount: groups.length,
+          studentCount: students.length,
+          teacherCount: teachers.length,
+        });
+      } catch {
+        return createWorkspaceFacts({ courseCount: courses.length });
+      }
+    },
+  });
+  const workspaceFacts =
+    workspaceFactsQuery.data ?? createWorkspaceFacts({ courseCount: courses.length });
   const tutorialPhase = resolveOnboardingPhase(workspaceFacts);
   const topAccessory = (
     <AccountControls
@@ -625,98 +772,12 @@ function SignedInWorkspace({
   );
 
   async function refreshCourses() {
-    setIsLoadingCourses(true);
-    setCoursesError(null);
-
-    try {
-      const nextCourses = await listCourses({ includeInactive: true });
-      setCourses(nextCourses);
-    } catch (caughtError) {
-      setCoursesError(getCourseLoadErrorMessage(caughtError));
-    } finally {
-      setIsLoadingCourses(false);
-    }
+    await queryClient.invalidateQueries({ queryKey: queryKeys.courses() });
   }
 
-  async function refreshCohorts(course: Course | null) {
-    if (!course) {
-      setCohorts([]);
-      return;
-    }
-
-    try {
-      const nextCohorts = await listCohorts(course.id);
-      setCohorts(nextCohorts);
-    } catch {
-      setCohorts([]);
-    }
-  }
-
-  async function refreshWorkspaceFacts(course: Course | null) {
-    if (!course) {
-      setWorkspaceFacts(
-        createWorkspaceFacts({
-          courseCount: courses.length,
-        }),
-      );
-      return;
-    }
-
-    const studentsEntity = findEntityDefinition(
-      `${appSchema}.students`,
-      entityDefinitions,
-    );
-    const groupsEntity = findEntityDefinition(
-      `${appSchema}.groups`,
-      entityDefinitions,
-    );
-    const teachersEntity = findEntityDefinition(
-      `${appSchema}.teachers`,
-      entityDefinitions,
-    );
-    const attendanceEntity = findEntityDefinition(
-      `${appSchema}.attendanceRecords`,
-      entityDefinitions,
-    );
-
-    if (!studentsEntity || !groupsEntity || !teachersEntity || !attendanceEntity) {
-      setWorkspaceFacts(createWorkspaceFacts({ courseCount: courses.length }));
-      return;
-    }
-
-    try {
-      const [students, groups, teachers, attendanceRecords] = await Promise.all([
-        listRows(studentsEntity, course, activeCohort ?? undefined),
-        listRows(groupsEntity, course, activeCohort ?? undefined),
-        listRows(teachersEntity, course, activeCohort ?? undefined),
-        listRows(attendanceEntity, course, activeCohort ?? undefined),
-      ]);
-
-      setWorkspaceFacts(
-        createWorkspaceFacts({
-          attendanceRecordCount: attendanceRecords.length,
-          courseCount: courses.length,
-          groupCount: groups.length,
-          studentCount: students.length,
-          teacherCount: teachers.length,
-        }),
-      );
-    } catch {
-      setWorkspaceFacts(createWorkspaceFacts({ courseCount: courses.length }));
-    }
-  }
-
-  useEffect(() => {
-    void refreshCourses();
-  }, []);
-
-  useEffect(() => {
-    void refreshCohorts(activeCourse);
-  }, [activeCourse?.id]);
-
-  useEffect(() => {
-    void refreshWorkspaceFacts(activeCourse);
-  }, [activeCohort?.id, activeCourse?.id, courses.length]);
+  const coursesError = coursesQuery.error
+    ? getCourseLoadErrorMessage(coursesQuery.error)
+    : null;
 
   useEffect(() => {
     if (activeCourse?.slug) {
@@ -787,13 +848,16 @@ function SignedInWorkspace({
           <p className="mt-4 text-sm leading-7 text-slate-600">
             {text.deniedBody}
           </p>
+          <div className="mt-6 flex justify-end">
+            <LogoutButton />
+          </div>
         </div>
         <UserSummary />
       </div>
     );
   }
 
-  if (isLoadingCourses) {
+  if (coursesQuery.isLoading) {
     return (
       <div className="rounded-3xl border border-white/70 bg-white/85 p-6 shadow-sm">
         <p className="text-sm text-slate-600">{text.loadingAccount}</p>
@@ -828,7 +892,12 @@ function SignedInWorkspace({
     return (
       <>
         <div className="relative z-50 flex justify-end">{topAccessory}</div>
-        <UserSummary />
+        <div className="space-y-4">
+          <UserSummary />
+          <div className="flex justify-end">
+            <LogoutButton />
+          </div>
+        </div>
       </>
     );
   }

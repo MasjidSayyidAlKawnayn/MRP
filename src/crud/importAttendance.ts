@@ -403,6 +403,7 @@ function studentIdentity(student: ParsedStudent, groupId: CrudValue) {
     student.lastName,
     String(groupId ?? ""),
     student.phone,
+    student.familyPhone,
   ].join("|");
 }
 
@@ -412,6 +413,7 @@ function existingStudentIdentity(student: CrudRow) {
     rowString(student, "lastName"),
     rowString(student, "groupId"),
     rowString(student, "phone"),
+    rowString(student, "primaryParentPhone"),
   ].join("|");
 }
 
@@ -541,6 +543,7 @@ export async function importAttendanceData({
             groupId: group.id,
             lastName: student.lastName,
             phone: student.phone,
+            primaryParentPhone: student.familyPhone,
             teacherId: teacher?.id ?? null,
           },
           activeCourse,
