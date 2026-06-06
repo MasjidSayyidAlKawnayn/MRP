@@ -536,10 +536,12 @@ function displayPhone(value: CrudValue | undefined) {
 
 function StudentPhoneManagement({
   groups,
+  onOpenStudentList,
   onEdit,
   students,
 }: {
   groups: CrudRow[];
+  onOpenStudentList: () => void;
   onEdit: (student: CrudRow) => void;
   students: CrudRow[];
 }) {
@@ -572,18 +574,24 @@ function StudentPhoneManagement({
               عرض سريع لجميع أرقام الطالب والعائلة في مكان واحد.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-xs sm:text-sm">
-            <div className="rounded-xl bg-slate-100 px-3 py-2">
-              <span className="block font-bold text-ink">{students.length}</span>
-              <span className="text-slate-500">طالب</span>
-            </div>
-            <div className="rounded-xl bg-emerald-50 px-3 py-2">
-              <span className="block font-bold text-emerald-800">{withPhones}</span>
-              <span className="text-emerald-700">لديه رقم</span>
-            </div>
-            <div className="rounded-xl bg-amber-50 px-3 py-2">
-              <span className="block font-bold text-amber-800">{completeSets}</span>
-              <span className="text-amber-700">مكتمل</span>
+          <div className="flex flex-col items-stretch gap-3 sm:items-end">
+            <Button className="gap-2 self-start sm:self-auto" onClick={onOpenStudentList} variant="outline">
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              تعديل بيانات الطلاب
+            </Button>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs sm:text-sm">
+              <div className="rounded-xl bg-slate-100 px-3 py-2">
+                <span className="block font-bold text-ink">{students.length}</span>
+                <span className="text-slate-500">طالب</span>
+              </div>
+              <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                <span className="block font-bold text-emerald-800">{withPhones}</span>
+                <span className="text-emerald-700">لديه رقم</span>
+              </div>
+              <div className="rounded-xl bg-amber-50 px-3 py-2">
+                <span className="block font-bold text-amber-800">{completeSets}</span>
+                <span className="text-amber-700">مكتمل</span>
+              </div>
             </div>
           </div>
         </div>
@@ -4350,6 +4358,16 @@ export function CrudDashboard({
           <StudentPhoneManagement
             groups={
               relationOptions[`${activeSchema}.groups` as EntityId] ?? []
+            }
+            onOpenStudentList={() =>
+              void navigate({
+                to: dashboardPath({
+                  courseSlug: activeCourse.slug,
+                  cohortTag: activeCohort?.tag,
+                  entity: "students",
+                }),
+                search: {},
+              })
             }
             onEdit={(student) =>
               navigateDashboard({
