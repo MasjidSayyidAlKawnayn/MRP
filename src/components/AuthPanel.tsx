@@ -56,6 +56,11 @@ import {
   type WorkspaceOnboardingFacts,
 } from "../onboarding/state";
 import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogTitle,
+  RoutedViewDialogContent,
+} from "./ui/dialog";
 import { queryKeys } from "../features/query/keys";
 import {
   useWorkspaceRouteState,
@@ -683,6 +688,7 @@ function SignedInWorkspace({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const coursesQuery = useQuery({
+    enabled: !isLoading && hasAdminUiAccess,
     queryKey: queryKeys.courses(),
     queryFn: () => listCourses({ includeInactive: true }),
   });
@@ -1098,7 +1104,21 @@ function SignedInWorkspace({
     return (
       <>
         <div className="relative z-50 flex justify-end">{topAccessory}</div>
-        <CourseDetailPage course={selectedCourse} />
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              void navigate({ to: "/courses" });
+            }
+          }}
+          open
+        >
+          <RoutedViewDialogContent dir="rtl">
+            <DialogTitle className="sr-only">
+              {selectedCourse?.name ?? text.courses}
+            </DialogTitle>
+            <CourseDetailPage course={selectedCourse} />
+          </RoutedViewDialogContent>
+        </Dialog>
       </>
     );
   }
@@ -1152,6 +1172,7 @@ function SignedInWorkspace({
       attendanceCharts={routeState.attendanceCharts}
       attendanceTaking={routeState.attendanceTaking}
       manualPoints={routeState.manualPoints}
+      studentPhones={routeState.studentPhones}
       topAccessory={topAccessory}
     />
   );

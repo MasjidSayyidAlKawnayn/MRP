@@ -187,7 +187,7 @@ a:focus-visible {
 .group-color-row {
   background-color: color-mix(
     in srgb,
-    var(--group-color-light) 14%,
+    var(--group-color-selected) 32%,
     transparent
   );
 }
@@ -195,45 +195,36 @@ a:focus-visible {
 .group-color-row:hover {
   background-color: color-mix(
     in srgb,
-    var(--group-color-light) 24%,
+    var(--group-color-selected) 42%,
     transparent
   );
 }
 
 .group-color-chip {
-  background-color: color-mix(in srgb, var(--group-color-light) 18%, white);
-  border-color: color-mix(in srgb, var(--group-color-light) 36%, white);
-  color: color-mix(in srgb, var(--group-color-light) 54%, #0f172a);
+  background-color: color-mix(in srgb, var(--group-color-selected) 42%, white);
+  border-color: color-mix(in srgb, var(--group-color-selected) 72%, white);
+  color: #0f172a;
 }
 
 .group-color-marker {
-  background-color: var(--group-color-light);
+  background-color: var(--group-color-selected);
 }
 
-@media (prefers-color-scheme: dark) {
-  .group-color-row {
-    background-color: color-mix(
-      in srgb,
-      var(--group-color-dark) 16%,
-      transparent
-    );
-  }
-
-  .group-color-row:hover {
-    background-color: color-mix(
-      in srgb,
-      var(--group-color-dark) 28%,
-      transparent
-    );
-  }
-
-  .group-color-chip {
-    background-color: color-mix(in srgb, var(--group-color-dark) 18%, #0f172a);
-    border-color: color-mix(in srgb, var(--group-color-dark) 42%, #0f172a);
-    color: color-mix(in srgb, var(--group-color-dark) 62%, white);
-  }
-
-  .group-color-marker {
-    background-color: var(--group-color-dark);
-  }
+.group-color-picker .react-colorful {
+  width: 100%;
+  height: 220px;
 }
+
+.group-color-picker .react-colorful__saturation {
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.group-color-picker .react-colorful__last-control {
+  border-radius: 0 0 0.75rem 0.75rem;
+}
+
+.group-color-picker .react-colorful__pointer {
+  height: 22px;
+  width: 22px;
+}
+

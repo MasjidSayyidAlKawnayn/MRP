@@ -43,11 +43,11 @@ export async function createCohort(values: CohortInput) {
     .from("cohorts")
     .insert({
       course_id: values.courseId,
-      ends_at: values.endsAt ?? null,
-      name: values.name,
+      ends_at: values.endsAt?.trim() || null,
+      name: values.name.trim(),
       previous_cohort_id: values.previousCohortId ?? null,
-      starts_at: values.startsAt ?? null,
-      status: values.status ?? "active",
+      starts_at: values.startsAt?.trim() || null,
+      status: values.status?.trim() || "active",
       tag: normalizeSlug(values.tag),
     })
     .select()

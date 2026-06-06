@@ -66,7 +66,7 @@ export function dashboardPath({
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
-  subpage?: "manual" | "take" | "charts";
+  subpage?: "manual" | "take" | "charts" | "phones";
 }) {
   const cohortSegment = cohortTag ? `/cohorts/${cohortTag}` : "";
   const basePath = `/courses/${courseSlug}${cohortSegment}/dashboard/${entity}`;
@@ -81,6 +81,10 @@ export function dashboardPath({
 
   if (subpage === "charts") {
     return `${basePath}/charts`;
+  }
+
+  if (subpage === "phones") {
+    return `${basePath}/phones`;
   }
 
   if (mode === "create") {

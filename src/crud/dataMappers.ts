@@ -9,6 +9,10 @@ export function normalizeSlug(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+export function trimCrudValue(value: CrudValue) {
+  return typeof value === "string" ? value.trim() : value;
+}
+
 export function toAppRow(
   entity: EntityDefinition,
   dbRow: Record<string, unknown>,
@@ -35,7 +39,7 @@ export function toDbPayload(
   return Object.fromEntries(
     entity.fields
       .filter((field) => field.key in values)
-      .map((field) => [field.column, values[field.key]]),
+      .map((field) => [field.column, trimCrudValue(values[field.key])]),
   );
 }
 
