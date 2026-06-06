@@ -29,6 +29,15 @@ describe("routing helpers", () => {
         subpage: "manual",
       }),
     ).toBe("/courses/default/dashboard/points/manual");
+
+    expect(
+      dashboardPath({
+        cohortTag: "summer2026",
+        courseSlug: "default",
+        entity: "students",
+        subpage: "phones",
+      }),
+    ).toBe("/courses/default/cohorts/summer2026/dashboard/students/phones");
   });
 
   it("keeps standardized routes and drops the legacy dashboard route", () => {
@@ -37,6 +46,9 @@ describe("routing helpers", () => {
     expect(routesByPath).toContain("/courses/$courseSlug/dashboard/$entity");
     expect(routesByPath).toContain("/courses/$courseSlug/dashboard/attendanceRecords/take");
     expect(routesByPath).toContain("/courses/$courseSlug/dashboard/points/manual");
+    expect(routesByPath).toContain(
+      "/courses/$courseSlug/cohorts/$cohortTag/dashboard/students/phones",
+    );
     expect(routesByPath).not.toContain("/dashboard/$schema/$entity");
   });
 

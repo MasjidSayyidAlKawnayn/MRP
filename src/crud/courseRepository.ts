@@ -66,13 +66,15 @@ async function seedDefaultPageTiers(course: Course) {
 
 export async function createCourse(values: CourseInput) {
   const client = getAppClient();
+  const name = values.name.trim();
+  const description = values.description?.trim() || null;
   const response = await client
     .from("courses")
     .insert({
-      description: values.description || null,
+      description,
       is_active: values.isActive ?? true,
-      name: values.name,
-      slug: normalizeSlug(values.slug || values.name),
+      name,
+      slug: normalizeSlug(values.slug || name),
     })
     .select()
     .single();
@@ -96,7 +98,7 @@ export async function updateCourse(id: CourseId, values: Partial<CourseInput>) {
   };
 
   if (values.description !== undefined) {
-    payload.description = values.description || null;
+    payload.description = values.description?.trim() || null;
   }
 
   if (values.isActive !== undefined) {
@@ -104,7 +106,7 @@ export async function updateCourse(id: CourseId, values: Partial<CourseInput>) {
   }
 
   if (values.name !== undefined) {
-    payload.name = values.name;
+    payload.name = values.name.trim();
   }
 
   if (values.slug !== undefined) {

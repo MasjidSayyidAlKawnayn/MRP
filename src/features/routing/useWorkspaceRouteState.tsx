@@ -20,6 +20,7 @@ export type WorkspaceRouteState = {
   mode: ViewMode;
   page: WorkspacePage;
   rowId?: string;
+  studentPhones?: boolean;
   courseSlug: string;
   search: RouteSearch;
 };
@@ -230,6 +231,28 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
     };
   }
 
+  const cohortStudentPhones = matchRoute({
+    to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/students/phones",
+    fuzzy: false,
+  });
+  if (cohortStudentPhones) {
+    return {
+      canonicalPath: dashboardPath({
+        cohortTag: cohortStudentPhones.cohortTag,
+        courseSlug: cohortStudentPhones.courseSlug,
+        entity: "students",
+        subpage: "phones",
+      }),
+      cohortTag: cohortStudentPhones.cohortTag,
+      courseSlug: cohortStudentPhones.courseSlug,
+      entity: "students",
+      mode: "list",
+      page: "dashboard",
+      search,
+      studentPhones: true,
+    };
+  }
+
   const cohortDashboardDetail = matchRoute({
     to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/$rowId",
     fuzzy: false,
@@ -374,6 +397,26 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
       mode: resolveDashboardMode(undefined, false, true),
       page: "dashboard",
       search,
+    };
+  }
+
+  const studentPhones = matchRoute({
+    to: "/courses/$courseSlug/dashboard/students/phones",
+    fuzzy: false,
+  });
+  if (studentPhones) {
+    return {
+      canonicalPath: dashboardPath({
+        courseSlug: studentPhones.courseSlug,
+        entity: "students",
+        subpage: "phones",
+      }),
+      courseSlug: studentPhones.courseSlug,
+      entity: "students",
+      mode: "list",
+      page: "dashboard",
+      search,
+      studentPhones: true,
     };
   }
 

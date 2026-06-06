@@ -1,6 +1,7 @@
 ﻿export type SchemaName = string;
 export type FieldType =
   | "boolean"
+  | "color"
   | "date"
   | "datetime"
   | "number"
@@ -37,6 +38,7 @@ export interface FieldDefinition {
   relation?: {
     entityId: EntityId;
     labelFields: readonly string[];
+    valueField?: string;
   };
 }
 
@@ -296,6 +298,18 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         type: "datetime",
       },
       {
+        key: "memorizationSummary",
+        column: "memorization_summary",
+        label: "Quran memorization",
+        type: "textarea",
+      },
+      {
+        key: "awqafCertificatesSummary",
+        column: "awqaf_certificates_summary",
+        label: "Awqaf certificates",
+        type: "textarea",
+      },
+      {
         key: "group",
         column: "group",
         label: "Group name",
@@ -353,7 +367,10 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         column: "group",
         label: "Group taught",
         type: "text",
-        required: true,
+        relation: {
+          ...groupRelation,
+          valueField: "name",
+        },
         helpText: "One teacher teaches one group.",
       },
       ...timestamps,
@@ -387,9 +404,8 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         key: "colorCode",
         column: "color_code",
         label: "Color",
-        type: "text",
+        type: "color",
         required: true,
-        helpText: "Use #light,#dark, for example #fecdd3,#be123c.",
       },
       ...timestamps,
     ],
@@ -897,6 +913,8 @@ const arabicFieldLabels: Record<string, string> = {
   ruleName: "\u0627\u0633\u0645 \u0627\u0644\u0642\u0627\u0639\u062F\u0629",
   registrationSubmittedAt:
     "\u0648\u0642\u062A \u062A\u0642\u062F\u064A\u0645 \u0627\u0644\u062A\u0633\u062C\u064A\u0644",
+  memorizationSummary: "\u0627\u0644\u0645\u062D\u0641\u0648\u0638\u0627\u062A \u0645\u0646 \u0627\u0644\u0642\u0631\u0622\u0646 \u0627\u0644\u0643\u0631\u064A\u0645",
+  awqafCertificatesSummary: "\u0634\u0647\u0627\u062F\u0627\u062A \u0627\u0644\u062D\u0641\u0638 \u0645\u0646 \u0627\u0644\u0623\u0648\u0642\u0627\u0641",
   residence: "\u0645\u0643\u0627\u0646 \u0627\u0644\u0633\u0643\u0646",
   schoolYear: "\u0627\u0644\u0633\u0646\u0629 \u0627\u0644\u062F\u0631\u0627\u0633\u064A\u0629",
   snapshot: "\u0644\u0642\u0637\u0629 \u0627\u0644\u0642\u0627\u0639\u062F\u0629",

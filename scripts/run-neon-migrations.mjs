@@ -10,6 +10,8 @@ const migrationFiles = [
   "student_registration_fields.sql",
   "student_school_year_integer.sql",
   "student_primary_parent_phone.sql",
+  "student_google_form_fields.sql",
+  "optional_teacher_group.sql",
   "fix_attendance_rls.sql",
   "fix_cohort_rls.sql",
   "secure_admin_rls.sql",

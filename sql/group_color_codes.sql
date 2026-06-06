@@ -17,7 +17,7 @@ ALTER TABLE mqs.groups
     'teal',
     'orange',
     'cyan'
-  ));
+  ) OR color_code ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?,#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
 
 WITH ranked_groups AS (
   SELECT

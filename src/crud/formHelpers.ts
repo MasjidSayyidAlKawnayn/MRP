@@ -48,7 +48,7 @@ export function getInitialValue(
   }
 
   if (field.key === "colorCode") {
-    return "#fecdd3,#be123c";
+    return "#f3a5b5,#e11d48";
   }
 
   return null;

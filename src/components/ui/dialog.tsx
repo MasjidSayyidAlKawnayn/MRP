@@ -43,6 +43,32 @@ const DialogContent = React.forwardRef<
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
+const RoutedViewDialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ children, className, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      className={cn(
+        "fixed inset-0 z-[100] h-dvh w-screen overflow-hidden bg-[#f7f1e6] outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[90dvh] sm:w-[min(90vw,68rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border sm:border-white/70 sm:shadow-2xl",
+        className,
+      )}
+      ref={ref}
+      {...props}
+    >
+      <div className="h-full overflow-y-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:max-h-[calc(90dvh-0.5rem)] sm:p-4">
+        {children}
+      </div>
+      <DialogClose className="fixed left-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 sm:absolute sm:left-4 sm:top-4">
+        <X className="h-5 w-5" />
+        <span className="sr-only">إغلاق</span>
+      </DialogClose>
+    </DialogPrimitive.Content>
+  </DialogPortal>
+));
+RoutedViewDialogContent.displayName = DialogPrimitive.Content.displayName;
+
 function DialogHeader({
   className,
   ...props
@@ -82,4 +108,5 @@ export {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  RoutedViewDialogContent,
 };

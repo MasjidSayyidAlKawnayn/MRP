@@ -40,6 +40,15 @@ const cohortEditRoute = createRoute({
   path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/$rowId/edit",
 });
 
+const studentPhonesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/dashboard/students/phones",
+});
+const cohortStudentPhonesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/students/phones",
+});
+
 const attendanceTakingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/dashboard/attendanceRecords/take",
@@ -137,6 +146,8 @@ export const router = createRouter({
     cohortCreateRoute,
     cohortDetailRoute,
     cohortEditRoute,
+    studentPhonesRoute,
+    cohortStudentPhonesRoute,
     attendanceTakingRoute,
     attendanceChartsRoute,
     cohortAttendanceTakingRoute,

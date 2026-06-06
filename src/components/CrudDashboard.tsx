@@ -1,28 +1,37 @@
 ﻿import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { HexAlphaColorPicker } from "react-colorful";
 import {
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type SortingState,
 } from "@tanstack/react-table";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BookOpen,
   CalendarCheck,
   CheckCircle2,
   Clock3,
   BarChart3,
   Database,
+  Download,
   Eye,
   ExternalLink,
   FileUp,
@@ -33,6 +42,8 @@ import {
   Loader2,
   Menu,
   Pencil,
+  Phone,
+  PhoneCall,
   Plus,
   RefreshCw,
   Save,
@@ -99,6 +110,7 @@ import {
   type ParsedAttendanceImport,
 } from "../crud/importAttendance";
 import { Button } from "./ui/button";
+import { cn } from "../lib/utils";
 import { queryKeys } from "../features/query/keys";
 import {
   Dialog,
@@ -106,6 +118,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  RoutedViewDialogContent,
 } from "./ui/dialog";
 import { Sheet, SheetContent } from "./ui/sheet";
 import { Select } from "./ui/select";
@@ -114,7 +127,6 @@ import {
   coursePath,
   dashboardPath,
   decodeDraft,
-  encodeDraft,
   getEntityId,
   type DraftValues,
   type RouteSearch,
@@ -127,8 +139,57 @@ import {
   getDateDaysAgoString,
   getTodayDateString,
 } from "../features/dashboard/utils/date";
+import { downloadGoogleContactsCsv } from "../crud/googleContacts";
 
 type RelationOptions = Partial<Record<EntityId, CrudRow[]>>;
+
+function SearchInput({
+  className,
+  inputRef,
+  onChange,
+  onClear,
+  placeholder,
+  value,
+}: {
+  className?: string;
+  inputRef?: Ref<HTMLInputElement>;
+  onChange: (value: string) => void;
+  onClear: () => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <div className="relative w-full">
+      <Search
+        aria-hidden="true"
+        className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+      />
+      <input
+        className={cn(
+          "w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pe-10 ps-10 text-sm shadow-sm [&::-webkit-search-cancel-button]:appearance-none",
+          className,
+        )}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        ref={inputRef}
+        type="search"
+        value={value}
+      />
+      {value ? (
+        <Button
+          aria-label="مسح البحث"
+          className="absolute left-1.5 top-1/2 h-8 w-8 -translate-y-1/2 rounded-lg text-slate-500 hover:text-slate-800"
+          onClick={onClear}
+          size="icon"
+          title="مسح البحث"
+          variant="secondary"
+        >
+          <X aria-hidden="true" className="h-4 w-4" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
 
 const groupColorClasses = {
   rose: {
@@ -181,12 +242,58 @@ type GroupColorDisplay = {
   style?: CSSProperties;
 };
 
-const hexColorPattern = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const hexColorPattern = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const groupColorPickerDefaults: Record<string, string> = {
+  rose: "#e11d48",
+  sky: "#0ea5e9",
+  lime: "#65a30d",
+  indigo: "#4f46e5",
+  violet: "#7c3aed",
+  teal: "#0d9488",
+  orange: "#ea580c",
+  cyan: "#0891b2",
+};
+
+function mixHexWithWhite(hex: string, whiteRatio = 0.72) {
+  const normalized = hex.slice(1);
+  const channels = [0, 2, 4].map((offset) =>
+    Number.parseInt(normalized.slice(offset, offset + 2), 16),
+  );
+  const mixed = channels.map((channel) =>
+    Math.round(channel + (255 - channel) * whiteRatio)
+      .toString(16)
+      .padStart(2, "0"),
+  );
+  const alpha = normalized.length === 8 ? normalized.slice(6) : "";
+  return `#${mixed.join("")}${alpha}`;
+}
+
+function getPickerColor(value: CrudValue | undefined) {
+  if (typeof value !== "string") {
+    return "#e11d48";
+  }
+
+  const customDarkColor = value.split(",")[1]?.trim();
+  if (customDarkColor && /^#[0-9a-f]{3}$/i.test(customDarkColor)) {
+    return `#${customDarkColor
+      .slice(1)
+      .split("")
+      .map((character) => character.repeat(2))
+      .join("")}`;
+  }
+
+  return groupColorPickerDefaults[value] ??
+    (/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(customDarkColor ?? "")
+      ? customDarkColor
+      : undefined) ??
+    "#e11d48";
+}
 
 function getCustomGroupColorStyle(lightColor: string, darkColor: string) {
   return {
     "--group-color-light": lightColor,
     "--group-color-dark": darkColor,
+    "--group-color-selected": darkColor,
   } as CSSProperties;
 }
 
@@ -334,6 +441,10 @@ function getInitialFormValue(
     }
   }
 
+  if (entity.table === "groups" && field.key === "colorCode") {
+    return "#f3a5b5,#e11d48";
+  }
+
   return getInitialValue(field, row);
 }
 
@@ -369,7 +480,8 @@ function getRelatedRow(
 
   return (
     relationOptions[field.relation.entityId]?.find(
-      (row) => String(row.id) === String(value),
+      (row) =>
+        String(row[field.relation!.valueField ?? "id"]) === String(value),
     ) ?? null
   );
 }
@@ -408,6 +520,145 @@ function getStudentName(student: CrudRow | null | undefined) {
     .map((part) => formatValue(part))
     .filter((part) => part !== ui.none)
     .join(" ");
+}
+
+const studentPhoneFields = [
+  { key: "phone", label: "هاتف الطالب" },
+  { key: "primaryParentPhone", label: "الهاتف الأساسي" },
+  { key: "fatherPhone", label: "هاتف الأب" },
+  { key: "motherPhone", label: "هاتف الأم" },
+] as const;
+
+function displayPhone(value: CrudValue | undefined) {
+  const phone = String(value ?? "").trim();
+  return phone || null;
+}
+
+function StudentPhoneManagement({
+  groups,
+  onEdit,
+  students,
+}: {
+  groups: CrudRow[];
+  onEdit: (student: CrudRow) => void;
+  students: CrudRow[];
+}) {
+  const [search, setSearch] = useState("");
+  const filteredStudents = searchRows(students, search, (student) => {
+    const group = groups.find(
+      (candidate) => String(candidate.id) === String(student.groupId),
+    );
+    return [
+      getStudentName(student),
+      group?.name,
+      ...studentPhoneFields.map(({ key }) => student[key]),
+    ].join(" ");
+  });
+  const withPhones = students.filter((student) =>
+    studentPhoneFields.some(({ key }) => displayPhone(student[key])),
+  ).length;
+  const completeSets = students.filter((student) =>
+    studentPhoneFields.every(({ key }) => displayPhone(student[key])),
+  ).length;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
+      <div className="border-b border-slate-200/80 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold text-cedar">الطلاب</p>
+            <h2 className="text-xl font-bold text-ink">إدارة أرقام الهواتف</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              عرض سريع لجميع أرقام الطالب والعائلة في مكان واحد.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs sm:text-sm">
+            <div className="rounded-xl bg-slate-100 px-3 py-2">
+              <span className="block font-bold text-ink">{students.length}</span>
+              <span className="text-slate-500">طالب</span>
+            </div>
+            <div className="rounded-xl bg-emerald-50 px-3 py-2">
+              <span className="block font-bold text-emerald-800">{withPhones}</span>
+              <span className="text-emerald-700">لديه رقم</span>
+            </div>
+            <div className="rounded-xl bg-amber-50 px-3 py-2">
+              <span className="block font-bold text-amber-800">{completeSets}</span>
+              <span className="text-amber-700">مكتمل</span>
+            </div>
+          </div>
+        </div>
+        <SearchInput
+          className="mt-3"
+          onChange={setSearch}
+          onClear={() => setSearch("")}
+          placeholder="ابحث بالاسم أو المجموعة أو رقم الهاتف"
+          value={search}
+        />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] divide-y divide-slate-200 text-right text-sm">
+          <thead className="bg-mist/70 text-slate-600">
+            <tr>
+              <th className="px-3 py-3 font-bold">الطالب</th>
+              <th className="px-3 py-3 font-bold">المجموعة</th>
+              {studentPhoneFields.map((field) => (
+                <th className="px-3 py-3 font-bold" key={field.key}>
+                  {field.label}
+                </th>
+              ))}
+              <th className="px-3 py-3 font-bold">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredStudents.map((student) => {
+              const group = groups.find(
+                (candidate) => String(candidate.id) === String(student.groupId),
+              );
+              return (
+                <tr className="hover:bg-cedar/5" key={String(student.id)}>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-bold text-ink">
+                    {getStudentName(student)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
+                    {formatValue(group?.name)}
+                  </td>
+                  {studentPhoneFields.map(({ key }) => {
+                    const phone = displayPhone(student[key]);
+                    return (
+                      <td className="whitespace-nowrap px-3 py-2.5" key={key}>
+                        {phone ? (
+                          <a
+                            className="inline-flex items-center gap-1.5 font-semibold text-cedar hover:underline"
+                            dir="ltr"
+                            href={`tel:${phone.replace(/\s/g, "")}`}
+                          >
+                            <PhoneCall className="h-3.5 w-3.5" aria-hidden="true" />
+                            {phone}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">غير مسجل</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2.5">
+                    <Button onClick={() => onEdit(student)} size="sm" variant="outline">
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                      تعديل
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {filteredStudents.length === 0 ? (
+        <p className="p-5 text-center text-sm text-slate-500">{ui.noMatches}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function getSessionTime(session: CrudRow | null | undefined) {
@@ -602,7 +853,8 @@ function getRelationLabel(
   );
   const relatedRows = relationOptions[field.relation.entityId] ?? [];
   const relatedRow = relatedRows.find(
-    (row) => String(row.id) === String(value),
+    (row) =>
+      String(row[field.relation!.valueField ?? "id"]) === String(value),
   );
 
   if (!relatedEntity || !relatedRow) {
@@ -642,6 +894,51 @@ function formatFieldValue(
   return getRelationLabel(field, value, relationOptions, entityDefinitions);
 }
 
+const arabicSortCollator = new Intl.Collator("ar", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareTableValues(left: unknown, right: unknown) {
+  if (typeof left === "number" && typeof right === "number") {
+    return left - right;
+  }
+
+  return arabicSortCollator.compare(String(left ?? ""), String(right ?? ""));
+}
+
+function SortableHeader({
+  canSort,
+  label,
+  onToggle,
+  sorted,
+}: {
+  canSort: boolean;
+  label: ReactNode;
+  onToggle?: () => void;
+  sorted: false | "asc" | "desc";
+}) {
+  if (!canSort) {
+    return <>{label}</>;
+  }
+
+  const Icon = sorted === "asc" ? ArrowUp : sorted === "desc" ? ArrowDown : ArrowUpDown;
+  const directionLabel =
+    sorted === "asc" ? "تصاعدياً" : sorted === "desc" ? "تنازلياً" : "غير مرتب";
+
+  return (
+    <button
+      aria-label={`ترتيب ${String(label)}، ${directionLabel}`}
+      className="inline-flex w-full items-center gap-1 text-right transition hover:text-cedar focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cedar/40"
+      onClick={onToggle}
+      type="button"
+    >
+      <span>{label}</span>
+      <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+    </button>
+  );
+}
+
 function EntityNav({
   activeEntityId,
   activeSchema,
@@ -651,7 +948,9 @@ function EntityNav({
   onClose,
   onSelectAttendanceTaking,
   onSelectAttendanceCharts,
+  onSelectStudentPhones,
   showAttendanceChartsActive,
+  showStudentPhonesActive,
 }: {
   activeEntityId: EntityId;
   activeSchema: SchemaName;
@@ -661,7 +960,9 @@ function EntityNav({
   onClose: () => void;
   onSelectAttendanceTaking: () => void;
   onSelectAttendanceCharts: () => void;
+  onSelectStudentPhones: () => void;
   showAttendanceChartsActive: boolean;
+  showStudentPhonesActive: boolean;
 }) {
   const navItems = entityDefinitions.filter((entity) => entity.showInNav !== false);
 
@@ -738,6 +1039,28 @@ function EntityNav({
                 </button>
               </>
             ) : null}
+            {entity.id === `${activeSchema}.students` ? (
+              <button
+                className={`mr-8 flex min-h-12 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
+                  showStudentPhonesActive
+                    ? "bg-cedar/10 text-cedar"
+                    : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
+                }`}
+                onClick={() => {
+                  onSelectStudentPhones();
+                  onClose();
+                }}
+                type="button"
+              >
+                <Phone className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block truncate">إدارة الهواتف</span>
+                  <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                    مراجعة أرقام الطالب وولي الأمر بسرعة
+                  </span>
+                </span>
+              </button>
+            ) : null}
           </div>
           );
         })}
@@ -797,7 +1120,6 @@ function EntityForm({
   row,
   draft,
   onCancel,
-  onDraftChange,
   onSubmit,
 }: {
   entity: EntityDefinition;
@@ -807,7 +1129,6 @@ function EntityForm({
   row?: CrudRow;
   draft?: DraftValues;
   onCancel: () => void;
-  onDraftChange: (values: DraftValues) => void;
   onSubmit: (values: Record<string, CrudValue>) => Promise<void>;
 }) {
   const fields = useMemo(() => getEditableFields(entity, mode), [entity, mode]);
@@ -822,24 +1143,12 @@ function EntityForm({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setValues(
-      Object.fromEntries(
-        fields.map((field) => [
-          field.key,
-          draft?.[field.key] ?? getInitialFormValue(entity, field, row),
-        ]),
-      ),
-    );
-  }, [draft, entity, fields, row]);
-
   function updateField(field: FieldDefinition, value: string) {
     setValues((current) => {
       const next = {
         ...current,
         [field.key]: parseInputValue(field, value),
       };
-      onDraftChange(next);
       return next;
     });
   }
@@ -885,13 +1194,18 @@ function EntityForm({
                 {(relationOptions[field.relation.entityId] ?? []).map(
                   (option) => {
                     const optionId = option.id;
+                    const optionValue =
+                      option[field.relation!.valueField ?? "id"];
                     const relationEntity = findEntityDefinition(
                       field.relation!.entityId,
                       entityDefinitions,
                     );
 
                     return (
-                      <option key={String(optionId)} value={String(optionId)}>
+                      <option
+                        key={String(optionId)}
+                        value={String(optionValue ?? "")}
+                      >
                         {relationEntity
                           ? getRowLabel(relationEntity, option)
                           : formatValue(optionId)}
@@ -917,6 +1231,34 @@ function EntityForm({
                 <option value="true">{ui.yes}</option>
                 <option value="false">{ui.no}</option>
               </select>
+            ) : field.type === "color" ? (
+              <div className="group-color-picker mt-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <HexAlphaColorPicker
+                  color={getPickerColor(values[field.key])}
+                  onChange={(darkColor) => {
+                    updateField(
+                      field,
+                      `${mixHexWithWhite(darkColor)},${darkColor}`,
+                    );
+                  }}
+                />
+                <div className="mt-3 flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="h-10 flex-1 rounded-xl border border-black/10 bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0px]"
+                  >
+                    <span
+                      className="block h-full rounded-xl"
+                      style={{
+                        backgroundColor: getPickerColor(values[field.key]),
+                      }}
+                    />
+                  </span>
+                  <span className="text-sm font-bold text-slate-600">
+                    اللون والشفافية
+                  </span>
+                </div>
+              </div>
             ) : (
               <input
                 className={inputClass}
@@ -1010,8 +1352,8 @@ function DetailView({
     .reverse();
 
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5 sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="rounded-3xl border border-white/70 bg-white/90 p-3 shadow-xl shadow-cedar/5 sm:p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold text-cedar">{ui.view}</p>
           <h2 className="mt-1 break-words text-xl font-bold text-ink sm:text-2xl">
@@ -1029,21 +1371,21 @@ function DetailView({
       </div>
 
       {studentStats ? (
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
+        <div className="mt-3 grid gap-2 md:grid-cols-4">
           {[
             ["صفحات الحفظ", studentStats.memorizedPages],
             ["نقاط الحفظ", studentStats.pagePoints],
             ["النقاط اليدوية", studentStats.manualPoints],
             ["المجموع", studentStats.totalPoints],
           ].map(([label, value]) => (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={label}>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3" key={label}>
               <p className="text-xs font-bold text-slate-500">{label}</p>
-              <p className="mt-2 text-2xl font-bold text-ink">{value}</p>
+              <p className="mt-1 text-xl font-bold text-ink">{value}</p>
             </div>
           ))}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 md:col-span-2">
             <p className="text-sm font-bold text-ink">آخر صفحات الحفظ</p>
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <div className="mt-2 space-y-1.5 text-sm text-slate-700">
               {recentPages.length ? recentPages.map((page) => (
                 <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(page.id)}>
                   صفحة {formatValue(page.page)} · {formatValue(page.memorizedOn)}
@@ -1051,9 +1393,9 @@ function DetailView({
               )) : <p className="text-slate-500">{ui.noRecords}</p>}
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 md:col-span-2">
             <p className="text-sm font-bold text-ink">آخر حركات النقاط</p>
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <div className="mt-2 space-y-1.5 text-sm text-slate-700">
               {recentManualTransactions.length ? recentManualTransactions.map((transaction) => (
                 <p className="rounded-xl bg-slate-50 px-3 py-2" key={String(transaction.id)}>
                   {formatValue(transaction.amount)} · {formatValue(transaction.reason)}
@@ -1064,11 +1406,11 @@ function DetailView({
         </div>
       ) : null}
 
-      <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+      <dl className="mt-3 grid gap-2 sm:grid-cols-2">
         {entity.fields.map((field) => (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4" key={field.key}>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2.5" key={field.key}>
             <dt className="text-xs font-bold text-slate-500">{field.label}</dt>
-            <dd className="mt-2 break-words text-sm font-semibold text-ink">
+            <dd className="mt-1 break-words text-sm font-semibold text-ink">
               {formatFieldValue(
                 field,
                 row[field.key],
@@ -1542,6 +1884,7 @@ export function CourseEditPage({
   onCoursesChanged: () => Promise<void>;
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   if (!course) {
@@ -1574,12 +1917,16 @@ export function CourseEditPage({
       });
       await onCoursesChanged();
       if (updatedCourse) {
-        void navigate({
-          to: coursePath({
-            courseSlug: updatedCourse.slug,
-            mode: "detail",
-          }),
-        });
+        if (router.history.canGoBack()) {
+          router.history.back();
+        } else {
+          void navigate({
+            to: coursePath({
+              courseSlug: updatedCourse.slug,
+              mode: "detail",
+            }),
+          });
+        }
       }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : ui.createError);
@@ -2248,6 +2595,9 @@ function PointsWorkspace({
   onNavigateStudent: (student: CrudRow) => void;
 }) {
   const [rankMode, setRankMode] = useState<"points" | "pages" | "recent">("points");
+  const [leaderboardSorting, setLeaderboardSorting] = useState<SortingState>([
+    { id: "totalPoints", desc: true },
+  ]);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [search, setSearch] = useState("");
@@ -2256,6 +2606,21 @@ function PointsWorkspace({
   const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
   const awards = relationOptions[`${activeSchema}.pagePointAwards` as EntityId] ?? [];
   const manual = relationOptions[`${activeSchema}.manualPointTransactions` as EntityId] ?? [];
+
+  useEffect(() => {
+    setLeaderboardSorting([
+      {
+        id:
+          rankMode === "pages"
+            ? "memorizedPages"
+            : rankMode === "recent"
+              ? "recentPoints"
+              : "totalPoints",
+        desc: true,
+      },
+    ]);
+  }, [rankMode]);
+
   function isInRange(value: CrudValue | undefined) {
     const date = String(value ?? "").slice(0, 10);
     return (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
@@ -2282,6 +2647,53 @@ function PointsWorkspace({
       }
       return right.stats.totalPoints - left.stats.totalPoints;
     });
+  const activeLeaderboardSort = leaderboardSorting[0];
+  const sortedStudents = activeLeaderboardSort
+    ? [...rankedStudents].sort((left, right) => {
+        const leftGroup = groups.find(
+          (group) => String(group.id) === String(left.student.groupId),
+        );
+        const rightGroup = groups.find(
+          (group) => String(group.id) === String(right.student.groupId),
+        );
+        const values: Record<string, [unknown, unknown]> = {
+          student: [getStudentName(left.student), getStudentName(right.student)],
+          group: [leftGroup?.name, rightGroup?.name],
+          memorizedPages: [left.stats.memorizedPages, right.stats.memorizedPages],
+          pagePoints: [left.stats.pagePoints, right.stats.pagePoints],
+          manualPoints: [left.stats.manualPoints, right.stats.manualPoints],
+          totalPoints: [left.stats.totalPoints, right.stats.totalPoints],
+          recentPoints: [left.recentPoints, right.recentPoints],
+        };
+        const [leftValue, rightValue] = values[activeLeaderboardSort.id] ?? ["", ""];
+        const comparison = compareTableValues(leftValue, rightValue);
+        return activeLeaderboardSort.desc ? -comparison : comparison;
+      })
+    : rankedStudents;
+  const leaderboardHeaders = [
+    { id: "rank", label: "الترتيب", sortable: false },
+    { id: "student", label: "الطالب", sortable: true },
+    { id: "group", label: "المجموعة", sortable: true },
+    { id: "memorizedPages", label: "الصفحات", sortable: true },
+    { id: "pagePoints", label: "نقاط الحفظ", sortable: true },
+    { id: "manualPoints", label: "يدوي", sortable: true },
+    { id: "totalPoints", label: "المجموع", sortable: true },
+    { id: "recentPoints", label: "الفترة", sortable: true },
+    { id: "actions", label: "", sortable: false },
+  ];
+
+  function toggleLeaderboardSort(id: string) {
+    setLeaderboardSorting((current) => {
+      const sort = current[0];
+      if (sort?.id !== id) {
+        return [{ id, desc: false }];
+      }
+      if (!sort.desc) {
+        return [{ id, desc: true }];
+      }
+      return [];
+    });
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
@@ -2299,7 +2711,13 @@ function PointsWorkspace({
             </select>
             <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
             <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
-            <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="بحث عن طالب" value={search} />
+            <SearchInput
+              className="h-11 min-w-0"
+              onChange={setSearch}
+              onClear={() => setSearch("")}
+              placeholder="بحث عن طالب"
+              value={search}
+            />
             <button
               aria-label="إضافة نقاط يدوية"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
@@ -2316,13 +2734,26 @@ function PointsWorkspace({
         <table className="w-full divide-y divide-slate-200 text-right text-sm">
           <thead className="bg-mist/70">
             <tr>
-              {["الترتيب", "الطالب", "المجموعة", "الصفحات", "نقاط الحفظ", "يدوي", "المجموع", "الفترة", ""].map((label) => (
-                <th className="px-3 py-2 font-bold text-slate-600" key={label}>{label}</th>
+              {leaderboardHeaders.map(({ id, label, sortable }) => (
+                <th className="px-3 py-2 font-bold text-slate-600" key={id}>
+                  <SortableHeader
+                    canSort={sortable}
+                    label={label}
+                    onToggle={() => toggleLeaderboardSort(id)}
+                    sorted={
+                      activeLeaderboardSort?.id === id
+                        ? activeLeaderboardSort.desc
+                          ? "desc"
+                          : "asc"
+                        : false
+                    }
+                  />
+                </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rankedStudents.map(({ student, stats, recentPoints }, index) => {
+            {sortedStudents.map(({ student, stats, recentPoints }, index) => {
               const group = groups.find((currentGroup) => String(currentGroup.id) === String(student.groupId));
               return (
                 <tr className="hover:bg-cedar/5" key={String(student.id)}>
@@ -2924,16 +3355,12 @@ function AttendanceWorkspace({
       {viewMode === "student" ? (
         <div className="grid items-stretch gap-4 p-3 lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)] lg:p-4">
           <div className="flex min-h-0 flex-col gap-3">
-            <label className="relative block">
-              <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
-                onChange={(event) => setStudentSearch(event.target.value)}
-                placeholder="بحث سريع عن طالب"
-                type="search"
-                value={studentSearch}
-              />
-            </label>
+            <SearchInput
+              onChange={setStudentSearch}
+              onClear={() => setStudentSearch("")}
+              placeholder="بحث سريع عن طالب"
+              value={studentSearch}
+            />
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pe-1">
               {filteredStudents.map((student) => {
                 const studentGroup = groups.find((group) => String(group.id) === String(student.groupId));
@@ -3028,16 +3455,12 @@ function AttendanceWorkspace({
       {viewMode === "group" ? (
         <div className="grid gap-4 p-3 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)] lg:p-4">
           <div className="space-y-3">
-            <label className="relative block">
-              <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
-                onChange={(event) => setGroupSearch(event.target.value)}
-                placeholder="بحث عن مجموعة"
-                type="search"
-                value={groupSearch}
-              />
-            </label>
+            <SearchInput
+              onChange={setGroupSearch}
+              onClear={() => setGroupSearch("")}
+              placeholder="بحث عن مجموعة"
+              value={groupSearch}
+            />
             <div className="space-y-2">
               {filteredGroups.map((group) => {
                 const color = getGroupColorByCode(group.colorCode);
@@ -3251,17 +3674,16 @@ function AttendanceWorkspace({
                 })}
               </div>
             </label>
-            <label className="relative block min-w-0 text-sm font-bold text-slate-700">
-              بحث داخل القائمة
-              <Search className="pointer-events-none absolute right-4 top-[2.65rem] h-4 w-4 text-slate-400" aria-hidden="true" />
-              <input
-                className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-white py-2.5 pe-3 ps-10 text-sm shadow-sm"
-                onChange={(event) => setRosterSearch(event.target.value)}
+            <div className="min-w-0 text-sm font-bold text-slate-700">
+              <span>بحث داخل القائمة</span>
+              <SearchInput
+                className="mt-2 min-w-0 font-normal"
+                onChange={setRosterSearch}
+                onClear={() => setRosterSearch("")}
                 placeholder="اسم الطالب أو رقمه"
-                type="search"
                 value={rosterSearch}
               />
-            </label>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -3351,6 +3773,7 @@ export function CrudDashboard({
   attendanceCharts = false,
   attendanceTaking = false,
   manualPoints = false,
+  studentPhones = false,
   mode,
   rowId,
   routeSearch,
@@ -3363,12 +3786,14 @@ export function CrudDashboard({
   attendanceCharts?: boolean;
   attendanceTaking?: boolean;
   manualPoints?: boolean;
+  studentPhones?: boolean;
   mode: ViewMode;
   rowId?: string;
   routeSearch: RouteSearch;
   topAccessory: ReactNode;
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const entityDefinitions = useMemo(
     () => getEntityDefinitions(activeSchema),
@@ -3381,6 +3806,7 @@ export function CrudDashboard({
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
   const [mutationError, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTerm = routeSearch.q ?? "";
   const draft = useMemo(() => decodeDraft(routeSearch.draft), [routeSearch.draft]);
 
@@ -3469,6 +3895,8 @@ export function CrudDashboard({
   });
   const rows = rowsQuery.data ?? [];
   const relationOptions = relationOptionsQuery.data ?? {};
+  const teacherRows =
+    relationOptions[`${activeSchema}.teachers` as EntityId] ?? [];
   const isLoading = rowsQuery.isLoading;
   const error = mutationError ?? (rowsQuery.error ? toReadableLoadError(rowsQuery.error) : null);
 
@@ -3594,16 +4022,13 @@ export function CrudDashboard({
       id: Number(selectedRow.id),
       values,
     });
-    void navigate({
-      to: dashboardPath({
-        courseSlug: activeCourse.slug,
-        cohortTag: activeCohort?.tag,
-        entity: getEntityKey(activeEntity.id),
-        mode: "detail",
-        rowId: selectedRow.id,
-      }),
-      search: cleanSearch({ q: searchTerm }),
-    });
+    if (router.history.canGoBack()) {
+      router.history.back();
+    } else {
+      navigateDashboard({
+        search: cleanSearch({ q: searchTerm }),
+      });
+    }
   }
 
   async function handleMarkAttendance(
@@ -3673,24 +4098,35 @@ export function CrudDashboard({
     });
   }
 
-  function handleDraftChange(values: DraftValues) {
-    navigateDashboard({
-      mode,
-      rowId,
-      replace: true,
-      search: cleanSearch({
-        q: searchTerm,
-        draft: encodeDraft(values),
-      }),
-    });
-  }
-
   const shouldShowRowsTable =
     !attendanceTaking &&
     !attendanceCharts &&
+    !studentPhones &&
     activeEntityKey !== "points" &&
     mode !== "create" &&
     mode !== "edit";
+
+  useEffect(() => {
+    if (!shouldShowRowsTable) {
+      return;
+    }
+
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        (event.code === "KeyF" || event.key.toLowerCase() === "f")
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    }
+
+    window.addEventListener("keydown", handleSearchShortcut, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handleSearchShortcut, { capture: true });
+  }, [shouldShowRowsTable]);
 
   return (
     <div className="min-w-0 space-y-4 sm:space-y-6">
@@ -3759,7 +4195,19 @@ export function CrudDashboard({
             search: {},
           });
         }}
+        onSelectStudentPhones={() => {
+          void navigate({
+            to: dashboardPath({
+              courseSlug: activeCourse.slug,
+              cohortTag: activeCohort?.tag,
+              entity: "students",
+              subpage: "phones",
+            }),
+            search: {},
+          });
+        }}
         showAttendanceChartsActive={attendanceCharts}
+        showStudentPhonesActive={studentPhones}
       />
 
       <section className="min-w-0 space-y-4 sm:space-y-5 xl:pr-80 xl:pt-0">
@@ -3835,9 +4283,9 @@ export function CrudDashboard({
               entity={activeEntity}
               entityDefinitions={entityDefinitions}
               draft={draft}
+              key={`${activeEntity.id}:create`}
               mode="create"
               onCancel={() => navigateDashboard({ search: cleanSearch({ q: searchTerm }) })}
-              onDraftChange={handleDraftChange}
               onSubmit={handleCreate}
               relationOptions={relationOptions}
             />
@@ -3853,6 +4301,7 @@ export function CrudDashboard({
               entity={activeEntity}
               entityDefinitions={entityDefinitions}
               draft={draft}
+              key={`${activeEntity.id}:edit:${String(selectedRow.id)}`}
               mode="edit"
               onCancel={() =>
                 navigateDashboard({
@@ -3861,7 +4310,6 @@ export function CrudDashboard({
                   search: cleanSearch({ q: searchTerm }),
                 })
               }
-              onDraftChange={handleDraftChange}
               onSubmit={handleUpdate}
               relationOptions={relationOptions}
               row={selectedRow}
@@ -3870,17 +4318,48 @@ export function CrudDashboard({
         ) : null}
 
         {mode === "detail" && selectedRow && activeEntityKey !== "points" ? (
-          <DetailView
-            entity={activeEntity}
-            entityDefinitions={entityDefinitions}
-            onEdit={() =>
+          <Dialog
+            onOpenChange={(open) => {
+              if (!open) {
+                navigateDashboard({ search: cleanSearch({ q: searchTerm }) });
+              }
+            }}
+            open
+          >
+            <RoutedViewDialogContent dir="rtl">
+              <DialogTitle className="sr-only">
+                {ui.view} {getRowLabel(activeEntity, selectedRow)}
+              </DialogTitle>
+              <DetailView
+                entity={activeEntity}
+                entityDefinitions={entityDefinitions}
+                onEdit={() =>
+                  navigateDashboard({
+                    mode: "edit",
+                    rowId: selectedRow.id,
+                  })
+                }
+                relationOptions={relationOptions}
+                row={selectedRow}
+              />
+            </RoutedViewDialogContent>
+          </Dialog>
+        ) : null}
+
+        {activeEntityKey === "students" && studentPhones ? (
+          <StudentPhoneManagement
+            groups={
+              relationOptions[`${activeSchema}.groups` as EntityId] ?? []
+            }
+            onEdit={(student) =>
               navigateDashboard({
+                entity: "students",
                 mode: "edit",
-                rowId: selectedRow.id,
+                rowId: student.id,
+                search: {},
               })
             }
-            relationOptions={relationOptions}
-            row={selectedRow}
+            students={rows}
           />
         ) : null}
 
@@ -3937,6 +4416,44 @@ export function CrudDashboard({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                {activeEntityKey === "students" && rows.length > 0 ? (
+                  <>
+                    <button
+                      aria-label="إدارة أرقام الهواتف"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-10 sm:w-10"
+                      onClick={() =>
+                        void navigate({
+                          to: dashboardPath({
+                            courseSlug: activeCourse.slug,
+                            cohortTag: activeCohort?.tag,
+                            entity: "students",
+                            subpage: "phones",
+                          }),
+                          search: {},
+                        })
+                      }
+                      title="إدارة أرقام الهواتف"
+                      type="button"
+                    >
+                      <Phone className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label="تصدير جهات اتصال Google"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-10 sm:w-10"
+                      onClick={() =>
+                        downloadGoogleContactsCsv(
+                          rows,
+                          teacherRows,
+                          `google-contacts-${activeCourse.slug}-${activeCohort?.tag ?? "all"}.csv`,
+                        )
+                      }
+                      title="تصدير جهات اتصال Google"
+                      type="button"
+                    >
+                      <Download className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                  </>
+                ) : null}
                 <button
                   aria-label={ui.refresh}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 sm:h-10 sm:w-10"
@@ -3959,24 +4476,30 @@ export function CrudDashboard({
                 ) : null}
               </div>
             </div>
-            <label className="relative block w-full">
-              <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white py-2 pe-4 ps-10 text-sm shadow-sm"
-                onChange={(event) =>
+            <SearchInput
+              className="py-2"
+              inputRef={searchInputRef}
+              onChange={(value) =>
+                navigateDashboard({
+                  replace: true,
+                  search: cleanSearch({
+                    ...routeSearch,
+                    q: value,
+                  }),
+                })
+              }
+              onClear={() =>
                   navigateDashboard({
                     replace: true,
                     search: cleanSearch({
                       ...routeSearch,
-                      q: event.target.value,
+                      q: "",
                     }),
                   })
-                }
-                placeholder={`${ui.search} ${activeEntity.label}`}
-                type="search"
-                value={searchTerm}
-              />
-            </label>
+              }
+              placeholder={`${ui.search} ${activeEntity.label}`}
+              value={searchTerm}
+            />
           </div>
 
           {isLoading ? (
@@ -4044,6 +4567,7 @@ function CrudRowsTable({
   relationOptions: RelationOptions;
   rows: CrudRow[];
 }) {
+  const [sorting, setSorting] = useState<SortingState>([]);
   const showsGroupColorColumn = ["groups", "students", "teachers"].includes(activeEntityKey);
   const columns = useMemo<ColumnDef<CrudRow>[]>(
     () => [
@@ -4051,6 +4575,7 @@ function CrudRowsTable({
         ? [
             {
               id: "groupColor",
+              enableSorting: false,
               header: () => <span className="sr-only">لون المجموعة</span>,
               cell: ({ row }) => {
                 const groupRow = getGroupRowForRecord(
@@ -4073,7 +4598,29 @@ function CrudRowsTable({
         : []),
       ...activeEntity.listFields.map(
         (key): ColumnDef<CrudRow> => ({
+          accessorFn: (row) => {
+            const field = getField(activeEntity, key);
+            const value = row[key];
+
+            if (value === null || value === undefined || value === "") {
+              return undefined;
+            }
+            if (field?.type === "number") {
+              const numberValue = Number(value);
+              return Number.isNaN(numberValue) ? String(value) : numberValue;
+            }
+            if (field?.type === "boolean") {
+              return value ? 1 : 0;
+            }
+            if (field?.relation) {
+              return getRelationLabel(field, value, relationOptions, entityDefinitions);
+            }
+            return value;
+          },
           id: key,
+          sortUndefined: "last",
+          sortingFn: (left, right, columnId) =>
+            compareTableValues(left.getValue(columnId), right.getValue(columnId)),
           header: () => getField(activeEntity, key)?.label ?? key,
           cell: ({ row }) => {
             const field = getField(activeEntity, key);
@@ -4096,6 +4643,8 @@ function CrudRowsTable({
             );
 
             if (isGroupColor || isGroupName) {
+              const displayValue = isGroupColor ? "اللون المختار" : value;
+
               return (
                 <span
                   className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold sm:text-sm ${groupColor?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
@@ -4105,7 +4654,7 @@ function CrudRowsTable({
                     className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor?.marker ?? "bg-slate-400"}`}
                     style={groupColor?.style}
                   />
-                  <span className="min-w-0 truncate">{value}</span>
+                  <span className="min-w-0 truncate">{displayValue}</span>
                 </span>
               );
             }
@@ -4136,6 +4685,7 @@ function CrudRowsTable({
         }),
       ),
       {
+        enableSorting: false,
         id: "actions",
         header: () => ui.actions,
         cell: ({ row }) => {
@@ -4178,6 +4728,9 @@ function CrudRowsTable({
     columns,
     data: rows,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setSorting,
+    state: { sorting },
   });
 
   return (
@@ -4199,7 +4752,14 @@ function CrudRowsTable({
                 >
                   {header.isPlaceholder
                     ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
+                    : (
+                        <SortableHeader
+                          canSort={header.column.getCanSort()}
+                          label={flexRender(header.column.columnDef.header, header.getContext())}
+                          onToggle={() => header.column.toggleSorting()}
+                          sorted={header.column.getIsSorted()}
+                        />
+                      )}
                 </th>
               ))}
             </tr>
