@@ -822,9 +822,11 @@ function SignedInWorkspace({
             ? "take"
             : routeState.attendanceCharts
               ? "charts"
-            : routeState.manualPoints
-              ? "manual"
-              : undefined,
+              : routeState.attendanceWizard
+                ? "wizard"
+                : routeState.manualPoints
+                  ? "manual"
+                  : undefined,
         }),
         replace: true,
         search: routeState.search,
@@ -978,6 +980,20 @@ function SignedInWorkspace({
             cohortTag,
             entity: "attendanceRecords",
             subpage: "charts",
+          }),
+      },
+      {
+        description: "\u062A\u0646\u0642\u0644 \u0628\u0627\u0644\u0644\u0648\u062D\u0629 \u0648\u0627\u062E\u062A\u0635\u0627\u0631\u0627\u062A \u0627\u0644\u0643\u064A\u0628\u0648\u0631\u062F \u0644\u062A\u0633\u062C\u064A\u0644 \u062D\u0636\u0648\u0631 \u0648\u0635\u0641\u062D\u0627\u062A \u0627\u0644\u064A\u0648\u0645 \u0633\u0631\u064A\u0639\u0627\u064B.",
+        icon: <Clock3 className="h-5 w-5" aria-hidden="true" />,
+        id: "attendance-wizard",
+        title: "\u0645\u0639\u0627\u0644\u062C \u0627\u0644\u064A\u0648\u0645",
+        requiresCourse: true,
+        to: (courseSlug, cohortTag) =>
+          dashboardPath({
+            courseSlug,
+            cohortTag,
+            entity: "attendanceRecords",
+            subpage: "wizard",
           }),
       },
       {
@@ -1171,6 +1187,7 @@ function SignedInWorkspace({
       routeSearch={routeState.search}
       attendanceCharts={routeState.attendanceCharts}
       attendanceTaking={routeState.attendanceTaking}
+      quickWizard={routeState.attendanceWizard}
       manualPoints={routeState.manualPoints}
       studentPhones={routeState.studentPhones}
       topAccessory={topAccessory}

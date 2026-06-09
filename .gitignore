@@ -4,6 +4,10 @@ node_modules
 .env.local
 .env.production
 .env.*.local
+*.log
+tmp/
+.tmp/
 *.tsbuildinfo
 *.csv
 sql/import_csv_attendance.sql
+/data/

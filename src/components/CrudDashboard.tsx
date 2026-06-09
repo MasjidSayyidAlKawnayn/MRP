@@ -37,6 +37,7 @@ import {
   FileUp,
   FileText,
   GraduationCap,
+  Keyboard,
   Layers3,
   ListChecks,
   Loader2,
@@ -109,6 +110,7 @@ import {
   type AttendanceImportResult,
   type ParsedAttendanceImport,
 } from "../crud/importAttendance";
+import { exportTableToPdf } from "../crud/exportTablePdf";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { queryKeys } from "../features/query/keys";
@@ -546,6 +548,9 @@ function StudentPhoneManagement({
   students: CrudRow[];
 }) {
   const [search, setSearch] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const filteredStudents = searchRows(students, search, (student) => {
     const group = groups.find(
       (candidate) => String(candidate.id) === String(student.groupId),
@@ -563,6 +568,27 @@ function StudentPhoneManagement({
     studentPhoneFields.every(({ key }) => displayPhone(student[key])),
   ).length;
 
+  async function handleExportPdf() {
+    if (!tableRef.current || filteredStudents.length === 0) {
+      return;
+    }
+
+    setExportError(null);
+    setExportingPdf(true);
+
+    try {
+      await exportTableToPdf(
+        tableRef.current,
+        "إدارة أرقام الهواتف",
+        "student-phone-numbers.pdf",
+      );
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "تعذر إنشاء ملف PDF.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
       <div className="border-b border-slate-200/80 p-3 sm:p-4">
@@ -575,10 +601,24 @@ function StudentPhoneManagement({
             </p>
           </div>
           <div className="flex flex-col items-stretch gap-3 sm:items-end">
-            <Button className="gap-2 self-start sm:self-auto" onClick={onOpenStudentList} variant="outline">
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-              تعديل بيانات الطلاب
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="gap-2"
+                disabled={exportingPdf || filteredStudents.length === 0}
+                onClick={() => void handleExportPdf()}
+              >
+                {exportingPdf ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                )}
+                تصدير PDF
+              </Button>
+              <Button className="gap-2" onClick={onOpenStudentList} variant="outline">
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+                تعديل بيانات الطلاب
+              </Button>
+            </div>
             <div className="grid grid-cols-3 gap-2 text-center text-xs sm:text-sm">
               <div className="rounded-xl bg-slate-100 px-3 py-2">
                 <span className="block font-bold text-ink">{students.length}</span>
@@ -602,10 +642,16 @@ function StudentPhoneManagement({
           placeholder="ابحث بالاسم أو المجموعة أو رقم الهاتف"
           value={search}
         />
+        {exportError ? (
+          <p className="mt-2 text-xs text-amber-700">{exportError}</p>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] divide-y divide-slate-200 text-right text-sm">
+        <table
+          className="w-full min-w-[980px] divide-y divide-slate-200 text-right text-sm"
+          ref={tableRef}
+        >
           <thead className="bg-mist/70 text-slate-600">
             <tr>
               <th className="px-3 py-3 font-bold">الطالب</th>
@@ -615,7 +661,9 @@ function StudentPhoneManagement({
                   {field.label}
                 </th>
               ))}
-              <th className="px-3 py-3 font-bold">الإجراءات</th>
+              <th className="px-3 py-3 font-bold" data-pdf-ignore>
+                الإجراءات
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -650,7 +698,7 @@ function StudentPhoneManagement({
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5" data-pdf-ignore>
                     <Button onClick={() => onEdit(student)} size="sm" variant="outline">
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                       تعديل
@@ -814,6 +862,56 @@ function formatPageRanges(pages: number[]) {
   }
 
   return ranges.join(", ");
+}
+
+function parsePageRangeDraft(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return [];
+  }
+
+  const tokens = trimmedValue
+    .split(/[\s,]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const pages = new Set<number>();
+
+  for (const token of tokens) {
+    const rangeMatch = token.match(/^(\d+)-(\d+)$/);
+
+    if (rangeMatch) {
+      const start = Number(rangeMatch[1]);
+      const end = Number(rangeMatch[2]);
+
+      if (!Number.isInteger(start) || !Number.isInteger(end)) {
+        throw new Error("أدخل الصفحات بصيغة 12 أو 12-14.");
+      }
+
+      const normalizedStart = Math.min(start, end);
+      const normalizedEnd = Math.max(start, end);
+
+      if (normalizedStart < 1 || normalizedEnd > 604) {
+        throw new Error("أرقام الصفحات يجب أن تكون بين 1 و604.");
+      }
+
+      for (let page = normalizedStart; page <= normalizedEnd; page += 1) {
+        pages.add(page);
+      }
+
+      continue;
+    }
+
+    const page = Number(token);
+
+    if (!Number.isInteger(page) || page < 1 || page > 604) {
+      throw new Error("أدخل الصفحات بصيغة 12 أو 12-14.");
+    }
+
+    pages.add(page);
+  }
+
+  return Array.from(pages).sort((left, right) => left - right);
 }
 
 function getGroupedMemorizationPageRows(rows: CrudRow[]) {
@@ -2801,6 +2899,20 @@ function ManualPointsPage({
   onBack: () => void;
   onCreated: () => Promise<void>;
 }) {
+  const pointPresets = [
+    { amount: 10, label: "قراءة الصفحة نظرا", reason: "قراءة الصفحة المطلوب حفظها نظرا بشكل جيد" },
+    { amount: 10, label: "برنامج صالة", reason: "برنامج صالة" },
+    { amount: 10, label: "وظيفة السبر", reason: "حفظ وظيفة السبر" },
+    { amount: 5, label: "لباس السنة", reason: "لباس السنة (كاّل بية وطائية)" },
+    { amount: 5, label: "إحضار المصحف", reason: "إحضار المصحف الخاص بالطالب" },
+    { amount: 5, label: "صلاة الجماعة", reason: "حضور صالة الجماعة (العصر)" },
+    { amount: 10, label: "صلاة الفجر", reason: "حضور صالة الفجر مع جماعة في المسجد" },
+    { amount: 50, label: "سبر الأوقاف", reason: "سبر الأوقاف (التقوى)" },
+    { amount: 15, label: "الآداب", reason: "اآلداب ضمن الحلقة والمسجد" },
+    { amount: -50, label: "غياب يوم", reason: "غياب يوم واحد" },
+    { amount: -10, label: "شغب النشاط", reason: "شغب ضمن النشاط" },
+    { amount: -10, label: "شغب الحلقة", reason: "شغب ضمن الحلقة" },
+  ] as const;
   const [studentId, setStudentId] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayDateString());
   const [amount, setAmount] = useState("");
@@ -2820,12 +2932,10 @@ function ManualPointsPage({
     }
   }, [studentId, students]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitTransaction(nextAmount: number, nextReason: string) {
     setError(null);
-    const parsedAmount = Number(amount);
 
-    if (!manualEntity || !studentId || !Number.isInteger(parsedAmount) || !reason.trim()) {
+    if (!manualEntity || !studentId || !Number.isInteger(nextAmount) || !nextReason.trim()) {
       setError("اختر الطالب وأدخل مقدار النقاط والسبب.");
       return;
     }
@@ -2836,8 +2946,8 @@ function ManualPointsPage({
       await createRow(manualEntity, {
         studentId: Number(studentId),
         transactionDate,
-        amount: parsedAmount,
-        reason: reason.trim(),
+        amount: nextAmount,
+        reason: nextReason.trim(),
       }, activeCourse);
       setAmount("");
       setReason("");
@@ -2849,12 +2959,26 @@ function ManualPointsPage({
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitTransaction(Number(amount), reason);
+  }
+
+  function handlePresetSelect(preset: (typeof pointPresets)[number]) {
+    setAmount(String(preset.amount));
+    setReason(preset.reason);
+    setError(null);
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
       <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-4">
         <div>
           <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
           <h2 className="mt-1 text-2xl font-bold text-ink">إضافة نقاط يدوية</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            نقاط الحفظ بالصفحات لا تضاف هنا لأنها تسجل تلقائيا عند إدخال الصفحات.
+          </p>
         </div>
         <button
           aria-label={ui.cancel}
@@ -2865,6 +2989,29 @@ function ManualPointsPage({
         >
           <Undo2 className="h-4 w-4" aria-hidden="true" />
         </button>
+      </div>
+      <div className="border-b border-slate-200/80 p-4">
+        <p className="text-sm font-bold text-slate-700">اختصارات سريعة من لائحة النقاط</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {pointPresets.map((preset) => (
+            <button
+              className={`rounded-2xl border px-3 py-3 text-right transition ${
+                preset.amount > 0
+                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:bg-emerald-100"
+                  : "border-amber-200 bg-amber-50/70 text-amber-900 hover:bg-amber-100"
+              }`}
+              key={`${preset.amount}-${preset.reason}`}
+              onClick={() => handlePresetSelect(preset)}
+              type="button"
+            >
+              <span className="block text-sm font-bold">{preset.label}</span>
+              <span className="mt-1 block text-xs">{preset.reason}</span>
+              <span className="mt-2 inline-flex rounded-full bg-white px-2 py-1 text-xs font-bold shadow-sm">
+                {preset.amount > 0 ? `+${preset.amount}` : preset.amount} نقطة
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
       <form className="grid gap-3 p-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_auto] md:items-end" onSubmit={handleSubmit}>
         <select className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setStudentId(event.target.value)} value={studentId}>
@@ -3040,6 +3187,7 @@ function AttendanceWorkspace({
   onNavigateRecord,
   onNavigateStudent,
   onOpenTakingPage,
+  onOpenWizardPage,
   onRefresh,
   records,
   relationOptions,
@@ -3058,6 +3206,7 @@ function AttendanceWorkspace({
   onNavigateRecord: (row: CrudRow, mode: "detail" | "edit") => void;
   onNavigateStudent: (student: CrudRow) => void;
   onOpenTakingPage: () => void;
+  onOpenWizardPage: () => void;
   onRefresh: () => void;
   records: CrudRow[];
   relationOptions: RelationOptions;
@@ -3348,14 +3497,24 @@ function AttendanceWorkspace({
           </div>
           ) : null}
           {!isTakingPage ? (
-            <button
-              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-cedar px-3 text-sm font-bold text-white shadow-lg shadow-cedar/15 transition hover:bg-palm"
-              onClick={onOpenTakingPage}
-              type="button"
-            >
-              <ListChecks className="h-4 w-4" aria-hidden="true" />
-              تسجيل الحضور
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                onClick={onOpenWizardPage}
+                type="button"
+              >
+                <Keyboard className="h-4 w-4" aria-hidden="true" />
+                معالج اليوم
+              </button>
+              <button
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-cedar px-3 text-sm font-bold text-white shadow-lg shadow-cedar/15 transition hover:bg-palm"
+                onClick={onOpenTakingPage}
+                type="button"
+              >
+                <ListChecks className="h-4 w-4" aria-hidden="true" />
+                تسجيل الحضور
+              </button>
+            </div>
           ) : null}
         </div>
       </div>
@@ -3773,6 +3932,639 @@ function AttendanceWorkspace({
   );
 }
 
+function DailyAttendanceWizard({
+  activeCohort,
+  activeCourse,
+  activeSchema,
+  entityDefinitions,
+  onClose,
+  onSaved,
+  records,
+  relationOptions,
+}: {
+  activeCohort?: Cohort | null;
+  activeCourse: Course;
+  activeSchema: SchemaName;
+  entityDefinitions: EntityDefinition[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  records: CrudRow[];
+  relationOptions: RelationOptions;
+}) {
+  const [selectedDate, setSelectedDate] = useState(getTodayDateString());
+  const [groupIndex, setGroupIndex] = useState(0);
+  const [studentIndex, setStudentIndex] = useState(0);
+  const [status, setStatus] = useState<"present" | "late" | null>(null);
+  const [pageDraft, setPageDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [sessionOverride, setSessionOverride] = useState<CrudRow | null>(null);
+  const pageInputRef = useRef<HTMLInputElement>(null);
+  const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
+  const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
+  const sessions = relationOptions[`${activeSchema}.attendanceSessions` as EntityId] ?? [];
+  const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
+  const tiers = relationOptions[`${activeSchema}.pagePointTiers` as EntityId] ?? [];
+  const attendanceEntity = getEntityByKey(entityDefinitions, activeSchema, "attendanceRecords");
+  const sessionEntity = getEntityByKey(entityDefinitions, activeSchema, "attendanceSessions");
+  const pagesEntity = getEntityByKey(entityDefinitions, activeSchema, "pages");
+  const awardsEntity = getEntityByKey(entityDefinitions, activeSchema, "pagePointAwards");
+  const groupsWithStudents = useMemo(
+    () =>
+      groups
+        .map((group) => ({
+          group,
+          students: students
+            .filter((student) => String(student.groupId) === String(group.id))
+            .sort((left, right) =>
+              arabicSortCollator.compare(getStudentName(left), getStudentName(right)),
+            ),
+        }))
+        .filter((entry) => entry.students.length > 0)
+        .sort((left, right) =>
+          arabicSortCollator.compare(
+            String(left.group.name ?? ""),
+            String(right.group.name ?? ""),
+          ),
+        ),
+    [groups, students],
+  );
+  const currentGroupEntry = groupsWithStudents[groupIndex] ?? null;
+  const currentGroup = currentGroupEntry?.group ?? null;
+  const currentStudents = currentGroupEntry?.students ?? [];
+  const currentStudent = currentStudents[studentIndex] ?? null;
+  const currentColor = getGroupColorByCode(currentGroup?.colorCode);
+  const currentSession =
+    sessionOverride ??
+    [...sessions]
+      .filter((session) => String(session.sessionDate) === selectedDate)
+      .sort(
+        (left, right) =>
+          getNumberValue(left.sequenceOnDate) - getNumberValue(right.sequenceOnDate),
+      )[0] ??
+    null;
+  const currentRecord =
+    currentStudent && currentSession
+      ? records.find(
+          (record) =>
+            String(record.studentId) === String(currentStudent.id) &&
+            String(record.attendanceSessionId) === String(currentSession.id),
+        ) ?? null
+      : null;
+  const todaysPages = currentStudent
+    ? pages.filter(
+        (page) =>
+          String(page.studentId) === String(currentStudent.id) &&
+          String(page.memorizedOn) === selectedDate,
+      )
+    : [];
+  const todaysPageSummary = formatPageRanges(
+    todaysPages
+      .map((page) => Number(page.page))
+      .filter((page) => Number.isInteger(page)),
+  );
+
+  useEffect(() => {
+    setSessionOverride(null);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (groupIndex >= groupsWithStudents.length) {
+      setGroupIndex(Math.max(0, groupsWithStudents.length - 1));
+    }
+  }, [groupIndex, groupsWithStudents.length]);
+
+  useEffect(() => {
+    if (studentIndex >= currentStudents.length) {
+      setStudentIndex(Math.max(0, currentStudents.length - 1));
+    }
+  }, [currentStudents.length, studentIndex]);
+
+  useEffect(() => {
+    setStatus(
+      currentRecord?.status === "present" || currentRecord?.status === "late"
+        ? currentRecord.status
+        : null,
+    );
+    setPageDraft("");
+    setError(null);
+    setMessage(null);
+  }, [currentRecord?.id, currentStudent?.id, selectedDate]);
+
+  function moveStudent(direction: 1 | -1) {
+    if (!groupsWithStudents.length) {
+      return;
+    }
+
+    if (direction === 1) {
+      if (studentIndex < currentStudents.length - 1) {
+        setStudentIndex((value) => value + 1);
+        return;
+      }
+
+      const nextGroupIndex = groupsWithStudents.findIndex(
+        (_, index) => index > groupIndex,
+      );
+
+      if (nextGroupIndex >= 0) {
+        setGroupIndex(nextGroupIndex);
+        setStudentIndex(0);
+      }
+
+      return;
+    }
+
+    if (studentIndex > 0) {
+      setStudentIndex((value) => value - 1);
+      return;
+    }
+
+    const previousGroupEntries = groupsWithStudents
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ index }) => index < groupIndex);
+    const previousGroup = previousGroupEntries.at(-1);
+
+    if (previousGroup) {
+      setGroupIndex(previousGroup.index);
+      setStudentIndex(previousGroup.entry.students.length - 1);
+    }
+  }
+
+  function moveGroup(direction: 1 | -1) {
+    if (!groupsWithStudents.length) {
+      return;
+    }
+
+    const nextIndex = groupIndex + direction;
+
+    if (nextIndex < 0 || nextIndex >= groupsWithStudents.length) {
+      return;
+    }
+
+    setGroupIndex(nextIndex);
+    setStudentIndex(0);
+  }
+
+  async function ensureSession() {
+    if (!sessionEntity) {
+      throw new Error("تعذر تحميل كيان جلسات الحضور.");
+    }
+
+    if (currentSession) {
+      return currentSession;
+    }
+
+    const createdSession = await createRow(
+      sessionEntity,
+      {
+        label: selectedDate,
+        sequenceOnDate: 1,
+        sessionDate: selectedDate,
+      },
+      activeCourse,
+      activeCohort ?? undefined,
+    );
+
+    if (!createdSession) {
+      throw new Error("تعذر إنشاء جلسة الحضور لهذا اليوم.");
+    }
+
+    setSessionOverride(createdSession);
+    return createdSession;
+  }
+
+  async function handleSaveAndAdvance() {
+    if (!attendanceEntity || !pagesEntity || !awardsEntity || !currentStudent) {
+      setError("تعذر تحميل بيانات المعالج.");
+      return;
+    }
+
+    setError(null);
+    setMessage(null);
+
+    const requestedPages = parsePageRangeDraft(pageDraft);
+
+    if (!status && requestedPages.length === 0) {
+      setError("حدد حالة حضور أو أدخل صفحات قبل الحفظ.");
+      return;
+    }
+
+    const duplicatePages = requestedPages.filter((pageNumber) =>
+      pages.some(
+        (existingPage) =>
+          String(existingPage.studentId) === String(currentStudent.id) &&
+          Number(existingPage.page) === pageNumber,
+      ),
+    );
+
+    if (duplicatePages.length > 0) {
+      setError(`هذه الصفحات مسجلة مسبقا: ${duplicatePages.join(", ")}`);
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      let savedAttendanceLabel = "";
+
+      if (status) {
+        const session = await ensureSession();
+
+        if (currentRecord?.id !== undefined && currentRecord.id !== null) {
+          await updateRow(
+            attendanceEntity,
+            Number(currentRecord.id),
+            { status },
+            activeCourse,
+            activeCohort ?? undefined,
+          );
+        } else {
+          await createRow(
+            attendanceEntity,
+            {
+              attendanceSessionId: session.id,
+              status,
+              studentId: currentStudent.id,
+            },
+            activeCourse,
+            activeCohort ?? undefined,
+          );
+        }
+
+        savedAttendanceLabel = getStatusLabel(status);
+      }
+
+      let savedPagesLabel = "";
+
+      if (requestedPages.length > 0) {
+        const tier = findTierForCount(tiers, requestedPages.length);
+        const totalPoints = getNumberValue(tier?.points);
+        const pointSplit = splitPoints(totalPoints, requestedPages.length);
+        const ruleName = String(tier?.name ?? `${requestedPages.length} page/day`);
+        const snapshot = `${requestedPages.length} pages on ${selectedDate}: ${totalPoints} points`;
+        const createdPages = await createRows(
+          pagesEntity,
+          requestedPages.map((pageNumber) => ({
+            memorizedOn: selectedDate,
+            page: pageNumber,
+            studentId: currentStudent.id,
+          })),
+          activeCourse,
+          activeCohort ?? undefined,
+        );
+
+        try {
+          await createRows(
+            awardsEntity,
+            createdPages.map((page, index) => ({
+              memorizationPageId: Number(page.id),
+              points: pointSplit[index] ?? 0,
+              ruleName,
+              snapshot,
+              studentId: currentStudent.id,
+            })),
+            activeCourse,
+            activeCohort ?? undefined,
+          );
+        } catch (awardError) {
+          await Promise.all(
+            createdPages
+              .map((page) => Number(page.id))
+              .filter((id) => Number.isFinite(id))
+              .map((id) =>
+                softDeleteRow(
+                  pagesEntity,
+                  id,
+                  activeCourse,
+                  activeCohort ?? undefined,
+                ),
+              ),
+          );
+          throw awardError;
+        }
+
+        savedPagesLabel = formatPageRanges(requestedPages);
+      }
+
+      await onSaved();
+      setMessage(
+        [
+          savedAttendanceLabel ? `الحضور: ${savedAttendanceLabel}` : null,
+          savedPagesLabel ? `الصفحات: ${savedPagesLabel}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      );
+      moveStudent(1);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      const target = event.target;
+      const isTextField =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement;
+      const normalizedKey = event.key.toLowerCase();
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleSaveAndAdvance();
+        return;
+      }
+
+      if (event.key === "/") {
+        event.preventDefault();
+        pageInputRef.current?.focus();
+        pageInputRef.current?.select();
+        return;
+      }
+
+      if (isTextField) {
+        if (event.key === "Escape") {
+          (target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).blur();
+        }
+
+        return;
+      }
+
+      if (event.key === "1") {
+        event.preventDefault();
+        setStatus("present");
+        return;
+      }
+
+      if (event.key === "2") {
+        event.preventDefault();
+        setStatus("late");
+        return;
+      }
+
+      if (event.key === "0") {
+        event.preventDefault();
+        setStatus(null);
+        return;
+      }
+
+      if (normalizedKey === "n") {
+        event.preventDefault();
+        moveStudent(1);
+        return;
+      }
+
+      if (normalizedKey === "p") {
+        event.preventDefault();
+        moveStudent(-1);
+        return;
+      }
+
+      if (normalizedKey === "g") {
+        event.preventDefault();
+        moveGroup(event.shiftKey ? -1 : 1);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
+
+  const progressLabel = currentStudent
+    ? `${studentIndex + 1}/${currentStudents.length}`
+    : "0/0";
+
+  return (
+    <section className="space-y-4">
+      <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-xl shadow-cedar/5">
+        <div className="border-b border-slate-200/80 p-3 sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-bold text-cedar">لوحة مفاتيح فقط</p>
+              <h2 className="mt-1 text-xl font-bold text-ink sm:text-2xl">
+                معالج حضور وصفحات اليوم
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                يتنقل بين المجموعات ثم الطلاب ويحفظ كل شيء ليوم واحد.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={onClose} type="button" variant="outline">
+                عودة للسجلات
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:p-4">
+          <div className="space-y-4">
+            <label className="block text-sm font-bold text-slate-700">
+              اليوم
+              <input
+                className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm"
+                onChange={(event) => setSelectedDate(event.target.value)}
+                type="date"
+                value={selectedDate}
+              />
+            </label>
+
+            <div className="grid gap-2">
+              {groupsWithStudents.map((entry, index) => {
+                const color = getGroupColorByCode(entry.group.colorCode);
+                const isActive = index === groupIndex;
+
+                return (
+                  <button
+                    className={`rounded-2xl border px-3 py-3 text-right transition ${
+                      isActive
+                        ? `${color?.row ?? "bg-cedar/5"} border-cedar shadow-sm`
+                        : "border-slate-200 bg-white hover:border-cedar/30"
+                    }`}
+                    key={String(entry.group.id)}
+                    onClick={() => {
+                      setGroupIndex(index);
+                      setStudentIndex(0);
+                    }}
+                    style={isActive ? color?.style : undefined}
+                    type="button"
+                  >
+                    <span
+                      className={`inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs font-bold ${color?.chip ?? "border-slate-200 bg-slate-100 text-slate-700"}`}
+                      style={color?.style}
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${color?.marker ?? "bg-slate-400"}`}
+                        style={color?.style}
+                      />
+                      {formatValue(entry.group.name)}
+                    </span>
+                    <span className="mt-2 block text-xs text-slate-500">
+                      {entry.students.length} طالب
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div
+              className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
+              style={currentColor?.style}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-500">
+                    المجموعة {groupIndex + 1}/{groupsWithStudents.length}
+                  </p>
+                  <h3 className="mt-1 truncate text-xl font-bold text-ink">
+                    {formatValue(currentGroup?.name)}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    الطالب {progressLabel}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm">
+                  <Keyboard className="h-4 w-4" aria-hidden="true" />
+                  Enter للحفظ ثم التالي
+                </span>
+              </div>
+
+              {currentStudent ? (
+                <div className="mt-4 rounded-2xl border border-white/80 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-slate-500">الطالب الحالي</p>
+                  <h4 className="mt-1 text-2xl font-bold text-ink">
+                    {getStudentName(currentStudent)}
+                  </h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    #{formatValue(currentStudent.id)}
+                  </p>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <button
+                      className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                        status === "present"
+                          ? getStatusClasses("present")
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                      onClick={() => setStatus("present")}
+                      type="button"
+                    >
+                      1 حاضر
+                    </button>
+                    <button
+                      className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                        status === "late"
+                          ? getStatusClasses("late")
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                      onClick={() => setStatus("late")}
+                      type="button"
+                    >
+                      2 متأخر
+                    </button>
+                    <button
+                      className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                        status === null
+                          ? "border-slate-300 bg-slate-100 text-slate-700"
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                      onClick={() => setStatus(null)}
+                      type="button"
+                    >
+                      0 بدون سجل
+                    </button>
+                  </div>
+
+                  <label className="mt-4 block text-sm font-bold text-slate-700">
+                    صفحات جديدة لليوم
+                    <input
+                      className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm"
+                      onChange={(event) => setPageDraft(event.target.value)}
+                      placeholder="مثال: 12 أو 12-14"
+                      ref={pageInputRef}
+                      value={pageDraft}
+                    />
+                  </label>
+
+                  <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <p className="text-xs font-bold text-slate-500">الحالة الحالية</p>
+                      <p className="mt-1 font-bold text-ink">
+                        {status ? getStatusLabel(status) : "بدون سجل"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <p className="text-xs font-bold text-slate-500">صفحات هذا اليوم</p>
+                      <p className="mt-1 font-bold text-ink">
+                        {todaysPageSummary || "لا يوجد"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+                  لا توجد مجموعات أو طلاب لبدء المعالج.
+                </div>
+              )}
+
+              {message ? (
+                <p className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+                  {message}
+                </p>
+              ) : null}
+              {error ? (
+                <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                  {error}
+                </p>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button disabled={isSaving} onClick={() => moveStudent(-1)} type="button" variant="outline">
+                  السابق
+                </Button>
+                <Button disabled={isSaving} onClick={() => void handleSaveAndAdvance()} type="button">
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+                  حفظ ثم التالي
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                "1 حاضر",
+                "2 متأخر",
+                "0 بدون سجل",
+                "/ تركيز الصفحات",
+                "Enter حفظ ثم التالي",
+                "N التالي",
+                "P السابق",
+                "G المجموعة التالية",
+                "Shift+G المجموعة السابقة",
+              ].map((shortcut) => (
+                <div
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700"
+                  key={shortcut}
+                >
+                  {shortcut}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function CrudDashboard({
   activeEntityKey,
   activeCohort,
@@ -3780,6 +4572,7 @@ export function CrudDashboard({
   activeSchema,
   attendanceCharts = false,
   attendanceTaking = false,
+  quickWizard = false,
   manualPoints = false,
   studentPhones = false,
   mode,
@@ -3793,6 +4586,7 @@ export function CrudDashboard({
   activeSchema: SchemaName;
   attendanceCharts?: boolean;
   attendanceTaking?: boolean;
+  quickWizard?: boolean;
   manualPoints?: boolean;
   studentPhones?: boolean;
   mode: ViewMode;
@@ -3829,7 +4623,11 @@ export function CrudDashboard({
       }
 
       if (activeEntityKey === "attendanceRecords") {
-        entityIds.push(`${activeSchema}.groups` as EntityId);
+        entityIds.push(
+          `${activeSchema}.groups` as EntityId,
+          `${activeSchema}.pages` as EntityId,
+          `${activeSchema}.pagePointTiers` as EntityId,
+        );
       }
 
       if (activeEntityKey === "students") {
@@ -4109,6 +4907,7 @@ export function CrudDashboard({
   const shouldShowRowsTable =
     !attendanceTaking &&
     !attendanceCharts &&
+    !quickWizard &&
     !studentPhones &&
     activeEntityKey !== "points" &&
     mode !== "create" &&
@@ -4381,7 +5180,7 @@ export function CrudDashboard({
           />
         ) : null}
 
-        {activeEntityKey === "attendanceRecords" ? (
+        {activeEntityKey === "attendanceRecords" && !quickWizard ? (
           <AttendanceWorkspace
             activeSchema={activeSchema}
             attendanceEntity={activeEntity}
@@ -4407,14 +5206,47 @@ export function CrudDashboard({
               void navigate({
                 to: dashboardPath({
                   courseSlug: activeCourse.slug,
-        cohortTag: activeCohort?.tag,
+                  cohortTag: activeCohort?.tag,
                   entity: "attendanceRecords",
                   subpage: "take",
                 }),
                 search: {},
               })
             }
+            onOpenWizardPage={() =>
+              void navigate({
+                to: dashboardPath({
+                  courseSlug: activeCourse.slug,
+                  cohortTag: activeCohort?.tag,
+                  entity: "attendanceRecords",
+                  subpage: "wizard",
+                }),
+                search: {},
+              })
+            }
             onRefresh={() => void refreshRows()}
+            records={rows}
+            relationOptions={relationOptions}
+          />
+        ) : null}
+
+        {activeEntityKey === "attendanceRecords" && quickWizard ? (
+          <DailyAttendanceWizard
+            activeCohort={activeCohort}
+            activeCourse={activeCourse}
+            activeSchema={activeSchema}
+            entityDefinitions={entityDefinitions}
+            onClose={() =>
+              void navigate({
+                to: dashboardPath({
+                  courseSlug: activeCourse.slug,
+                  cohortTag: activeCohort?.tag,
+                  entity: "attendanceRecords",
+                }),
+                search: {},
+              })
+            }
+            onSaved={invalidateDashboardQueries}
             records={rows}
             relationOptions={relationOptions}
           />

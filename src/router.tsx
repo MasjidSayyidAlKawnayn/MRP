@@ -57,6 +57,10 @@ const attendanceChartsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/dashboard/attendanceRecords/charts",
 });
+const attendanceWizardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/dashboard/attendanceRecords/wizard",
+});
 const cohortAttendanceTakingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/attendanceRecords/take",
@@ -64,6 +68,10 @@ const cohortAttendanceTakingRoute = createRoute({
 const cohortAttendanceChartsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/attendanceRecords/charts",
+});
+const cohortAttendanceWizardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/attendanceRecords/wizard",
 });
 
 const manualPointsRoute = createRoute({
@@ -150,8 +158,10 @@ export const router = createRouter({
     cohortStudentPhonesRoute,
     attendanceTakingRoute,
     attendanceChartsRoute,
+    attendanceWizardRoute,
     cohortAttendanceTakingRoute,
     cohortAttendanceChartsRoute,
+    cohortAttendanceWizardRoute,
     manualPointsRoute,
     createRoutePage,
     detailRoute,

@@ -13,6 +13,7 @@ import {
 export type WorkspaceRouteState = {
   attendanceCharts?: boolean;
   attendanceTaking?: boolean;
+  attendanceWizard?: boolean;
   canonicalPath?: string;
   cohortTag?: string;
   entity: EntityKey;
@@ -231,6 +232,28 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
     };
   }
 
+  const cohortWizard = matchRoute({
+    to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/attendanceRecords/wizard",
+    fuzzy: false,
+  });
+  if (cohortWizard) {
+    return {
+      attendanceWizard: true,
+      canonicalPath: dashboardPath({
+        cohortTag: cohortWizard.cohortTag,
+        courseSlug: cohortWizard.courseSlug,
+        entity: "attendanceRecords",
+        subpage: "wizard",
+      }),
+      cohortTag: cohortWizard.cohortTag,
+      courseSlug: cohortWizard.courseSlug,
+      entity: "attendanceRecords",
+      mode: "list",
+      page: "dashboard",
+      search,
+    };
+  }
+
   const cohortStudentPhones = matchRoute({
     to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/students/phones",
     fuzzy: false,
@@ -395,6 +418,26 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
       courseSlug: dashboardCreate.courseSlug,
       entity,
       mode: resolveDashboardMode(undefined, false, true),
+      page: "dashboard",
+      search,
+    };
+  }
+
+  const wizard = matchRoute({
+    to: "/courses/$courseSlug/dashboard/attendanceRecords/wizard",
+    fuzzy: false,
+  });
+  if (wizard) {
+    return {
+      attendanceWizard: true,
+      canonicalPath: dashboardPath({
+        courseSlug: wizard.courseSlug,
+        entity: "attendanceRecords",
+        subpage: "wizard",
+      }),
+      courseSlug: wizard.courseSlug,
+      entity: "attendanceRecords",
+      mode: "list",
       page: "dashboard",
       search,
     };

@@ -68,6 +68,8 @@ $env:COURSE_SLUG='default'; bun run generate:attendance-sql
 $env:COURSE_SLUG='default'; bun run seed:attendance
 ```
 
+Raw import and export artifacts belong under `data/` rather than the repo root. For example, `scripts/import-dump-students.mjs` now defaults to `data/imports/dump.tsv`.
+
 ## GitHub Pages
 
 The deployment workflow builds `dist` and publishes it with GitHub Pages. The workflow sets `VITE_BASE_PATH` from the repository name so Vite emits correct asset URLs for project pages.
