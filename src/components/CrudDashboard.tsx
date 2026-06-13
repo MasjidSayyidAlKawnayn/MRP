@@ -3042,32 +3042,184 @@ function MemorizationWorkspace({
   activeCourse,
   activeSchema,
   entityDefinitions,
+  isTableHidden,
   onCreated,
+  onToggleTable,
   relationOptions,
 }: {
   activeCourse: Course;
   activeSchema: SchemaName;
   entityDefinitions: EntityDefinition[];
+  isTableHidden: boolean;
   onCreated: () => Promise<void>;
+  onToggleTable: () => void;
   relationOptions: RelationOptions;
 }) {
   const [studentId, setStudentId] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [isStudentMenuOpen, setIsStudentMenuOpen] = useState(false);
+  const [highlightedStudentIndex, setHighlightedStudentIndex] = useState(0);
   const [fromPage, setFromPage] = useState("");
   const [toPage, setToPage] = useState("");
   const [memorizedOn, setMemorizedOn] = useState(getTodayDateString());
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastSavedBatch, setLastSavedBatch] = useState<{
+    awardIds: number[];
+    pageIds: number[];
+  } | null>(null);
+  const studentSearchRef = useRef<HTMLInputElement>(null);
+  const startPageRef = useRef<HTMLInputElement>(null);
+  const endPageRef = useRef<HTMLInputElement>(null);
   const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
   const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
   const tiers = relationOptions[`${activeSchema}.pagePointTiers` as EntityId] ?? [];
   const pagesEntity = getEntityByKey(entityDefinitions, activeSchema, "pages");
   const awardsEntity = getEntityByKey(entityDefinitions, activeSchema, "pagePointAwards");
+  const selectedStudent = students.find((student) => String(student.id) === studentId) ?? null;
+  const filteredStudents = useMemo(
+    () =>
+      searchRows(students, studentSearch, (student) =>
+        [getStudentName(student), formatValue(student.id)].join(" "),
+      ),
+    [studentSearch, students],
+  );
+  const visibleStudents = filteredStudents.slice(0, 8);
 
   useEffect(() => {
     if (!studentId && students[0]?.id !== undefined) {
       setStudentId(String(students[0].id));
     }
   }, [studentId, students]);
+
+  useEffect(() => {
+    if (selectedStudent) {
+      setStudentSearch(getStudentName(selectedStudent));
+    }
+  }, [selectedStudent]);
+
+  useEffect(() => {
+    setHighlightedStudentIndex(0);
+  }, [studentSearch]);
+
+  function focusStartPage() {
+    window.setTimeout(() => {
+      startPageRef.current?.focus();
+      startPageRef.current?.select();
+    }, 0);
+  }
+
+  function focusStudentSearch() {
+    window.setTimeout(() => {
+      studentSearchRef.current?.focus();
+      studentSearchRef.current?.select();
+      setIsStudentMenuOpen(true);
+    }, 0);
+  }
+
+  function focusEndPage() {
+    window.setTimeout(() => {
+      endPageRef.current?.focus();
+      endPageRef.current?.select();
+    }, 0);
+  }
+
+  function selectStudent(student: CrudRow) {
+    setStudentId(String(student.id));
+    setStudentSearch(getStudentName(student));
+    setIsStudentMenuOpen(false);
+    setHighlightedStudentIndex(0);
+  }
+
+  function commitHighlightedStudent() {
+    const nextStudent = visibleStudents[highlightedStudentIndex] ?? visibleStudents[0] ?? selectedStudent;
+    if (nextStudent) {
+      selectStudent(nextStudent);
+    }
+    return nextStudent;
+  }
+
+  function handleStudentSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setIsStudentMenuOpen(true);
+      setHighlightedStudentIndex((current) => Math.min(current + 1, Math.max(visibleStudents.length - 1, 0)));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setIsStudentMenuOpen(true);
+      setHighlightedStudentIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitHighlightedStudent();
+      focusStartPage();
+      return;
+    }
+
+    if (event.key === "Tab" && !event.shiftKey) {
+      event.preventDefault();
+      commitHighlightedStudent();
+      focusStartPage();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setIsStudentMenuOpen(false);
+    }
+  }
+
+  function handleStartPageTab(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Tab" || event.shiftKey) {
+      return;
+    }
+
+    const nextValue = event.currentTarget.value.trim();
+    if (!nextValue) {
+      return;
+    }
+
+    event.preventDefault();
+    setToPage(nextValue);
+    focusEndPage();
+  }
+
+  function handleSubmitButtonKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Tab" && !event.shiftKey) {
+      event.preventDefault();
+      studentSearchRef.current?.focus();
+      studentSearchRef.current?.select();
+    }
+  }
+
+  async function handleUndoLastSave() {
+    if (!lastSavedBatch || !pagesEntity || !awardsEntity) {
+      return;
+    }
+
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      await Promise.all(
+        lastSavedBatch.awardIds.map((id) => softDeleteRow(awardsEntity, id, activeCourse)),
+      );
+      await Promise.all(
+        lastSavedBatch.pageIds.map((id) => softDeleteRow(pagesEntity, id, activeCourse)),
+      );
+      setLastSavedBatch(null);
+      await onCreated();
+      focusStudentSearch();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3110,7 +3262,7 @@ function MemorizationWorkspace({
         activeCourse,
       );
       try {
-        await createRows(
+        const createdAwards = await createRows(
           awardsEntity,
           createdPages.map((page, index) => ({
             memorizationPageId: Number(page.id),
@@ -3121,6 +3273,14 @@ function MemorizationWorkspace({
           })),
           activeCourse,
         );
+        setLastSavedBatch({
+          awardIds: createdAwards
+            .map((award) => Number(award.id))
+            .filter((id) => Number.isFinite(id)),
+          pageIds: createdPages
+            .map((page) => Number(page.id))
+            .filter((id) => Number.isFinite(id)),
+        });
       } catch (awardError) {
         await Promise.all(
           createdPages
@@ -3133,6 +3293,7 @@ function MemorizationWorkspace({
       setFromPage("");
       setToPage("");
       await onCreated();
+      focusStudentSearch();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : ui.createError);
     } finally {
@@ -3143,31 +3304,118 @@ function MemorizationWorkspace({
   return (
     <div className="space-y-4">
       <form className="rounded-2xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-cedar/5" onSubmit={handleSubmit}>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,0.7fr))_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.3fr)_repeat(2,minmax(0,0.7fr))_auto_minmax(0,0.7fr)] md:items-end">
           <label className="text-sm font-bold text-slate-700">
             الطالب
-            <select className={inputClass} onChange={(event) => setStudentId(event.target.value)} value={studentId}>
-              {students.map((student) => (
-                <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                className={inputClass}
+                onChange={(event) => {
+                  setStudentSearch(event.target.value);
+                  setIsStudentMenuOpen(true);
+                }}
+                onBlur={() => {
+                  window.setTimeout(() => setIsStudentMenuOpen(false), 120);
+                }}
+                onFocus={() => {
+                  setIsStudentMenuOpen(true);
+                  studentSearchRef.current?.select();
+                }}
+                onKeyDown={handleStudentSearchKeyDown}
+                placeholder="ابحث باسم الطالب أو رقمه"
+                ref={studentSearchRef}
+                type="text"
+                value={studentSearch}
+              />
+              <Search aria-hidden="true" className="pointer-events-none absolute left-4 top-[calc(50%+0.4rem)] h-4 w-4 -translate-y-1/2 text-slate-400" />
+              {isStudentMenuOpen ? (
+                <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-200/80">
+                  {visibleStudents.length ? (
+                    visibleStudents.map((student, index) => (
+                      <button
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-3 py-2 text-right transition",
+                          index === highlightedStudentIndex ? "bg-cedar/10 text-cedar" : "text-slate-700 hover:bg-slate-100",
+                        )}
+                        key={String(student.id)}
+                        onClick={() => {
+                          selectStudent(student);
+                          focusStartPage();
+                        }}
+                        onMouseEnter={() => setHighlightedStudentIndex(index)}
+                        type="button"
+                      >
+                        <span className="truncate font-bold">{getStudentName(student)}</span>
+                        <span className="ms-3 shrink-0 text-xs text-slate-400">#{formatValue(student.id)}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-2 text-sm font-medium text-slate-500">لا يوجد طالب مطابق</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </label>
           <label className="text-sm font-bold text-slate-700">
             من صفحة
-            <input className={inputClass} min={1} max={604} onChange={(event) => setFromPage(event.target.value)} type="number" value={fromPage} />
+            <input
+              className={inputClass}
+              min={1}
+              max={604}
+              onChange={(event) => setFromPage(event.target.value)}
+              onKeyDown={handleStartPageTab}
+              ref={startPageRef}
+              type="number"
+              value={fromPage}
+            />
           </label>
           <label className="text-sm font-bold text-slate-700">
             إلى صفحة
-            <input className={inputClass} min={1} max={604} onChange={(event) => setToPage(event.target.value)} placeholder="اختياري" type="number" value={toPage} />
+            <input
+              className={inputClass}
+              min={1}
+              max={604}
+              onChange={(event) => setToPage(event.target.value)}
+              onFocus={(event) => event.currentTarget.select()}
+              ref={endPageRef}
+              type="number"
+              value={toPage}
+            />
           </label>
+          <button
+            className="inline-flex min-h-12 flex-col items-center justify-center rounded-2xl bg-cedar px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60"
+            disabled={isSaving}
+            onKeyDown={handleSubmitButtonKeyDown}
+            type="submit"
+          >
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span className="text-[11px] font-medium text-white/70">Enter</span>
+          </button>
           <label className="text-sm font-bold text-slate-700">
             التاريخ
             <input className={inputClass} onChange={(event) => setMemorizedOn(event.target.value)} type="date" value={memorizedOn} />
           </label>
-          <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cedar px-4 text-sm font-bold text-white shadow-lg shadow-cedar/20 transition hover:bg-palm disabled:opacity-60" disabled={isSaving} type="submit">
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            حفظ
-          </button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            className="gap-2 text-slate-600"
+            disabled={isSaving || !lastSavedBatch}
+            onClick={() => void handleUndoLastSave()}
+            type="button"
+            variant="outline"
+          >
+            <Undo2 className="h-4 w-4" aria-hidden="true" />
+            تراجع
+          </Button>
+          <Button
+            className="gap-2 text-slate-600"
+            onClick={onToggleTable}
+            type="button"
+            variant="outline"
+          >
+            <Eye className="h-4 w-4" aria-hidden="true" />
+            {isTableHidden ? "إظهار الجدول" : "إخفاء الجدول"}
+          </Button>
         </div>
         {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
       </form>
@@ -4608,6 +4856,7 @@ export function CrudDashboard({
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
   const [mutationError, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isPagesTableHidden, setIsPagesTableHidden] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTerm = routeSearch.q ?? "";
   const draft = useMemo(() => decodeDraft(routeSearch.draft), [routeSearch.draft]);
@@ -4720,6 +4969,12 @@ export function CrudDashboard({
   }, [activeCohort, activeCourse, activeEntity]);
 
   useEffect(() => {
+    if (activeEntityKey !== "pages") {
+      setIsPagesTableHidden(false);
+    }
+  }, [activeEntityKey]);
+
+  useEffect(() => {
     if (!rowId || (mode !== "detail" && mode !== "edit")) {
       setSelectedRow(null);
       return;
@@ -4765,6 +5020,41 @@ export function CrudDashboard({
   });
 
   async function handleSoftDelete(row: CrudRow) {
+    if (activeEntityKey === "pages" && row.isGroupedPageRow) {
+      const groupedRows = rows.filter(
+        (candidate) =>
+          String(candidate.studentId ?? "") === String(row.studentId ?? "") &&
+          String(candidate.memorizedOn ?? "") === String(row.memorizedOn ?? ""),
+      );
+      const groupedIds = groupedRows
+        .map((candidate) => Number(candidate.id))
+        .filter((id) => Number.isFinite(id));
+      const awards =
+        relationOptions[`${activeSchema}.pagePointAwards` as EntityId] ?? [];
+      const awardIds = awards
+        .filter((award) => groupedIds.includes(Number(award.memorizationPageId)))
+        .map((award) => Number(award.id))
+        .filter((id) => Number.isFinite(id));
+      const label = `${formatValue(row.page)} - ${formatValue(row.memorizedOn)}`;
+      const confirmed = window.confirm(`${ui.confirmDelete} ${label}؟ ${ui.hideRecord}`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      const awardsEntity = getEntityByKey(entityDefinitions, activeSchema, "pagePointAwards");
+      if (awardsEntity) {
+        await Promise.all(
+          awardIds.map((id) => softDeleteRow(awardsEntity, id, activeCourse, activeCohort ?? undefined)),
+        );
+      }
+      await Promise.all(
+        groupedIds.map((id) => softDeleteRow(activeEntity, id, activeCourse, activeCohort ?? undefined)),
+      );
+      await invalidateDashboardQueries();
+      return;
+    }
+
     const label = getRowLabel(activeEntity, row);
     const confirmed = window.confirm(`${ui.confirmDelete} ${label}؟ ${ui.hideRecord}`);
 
@@ -4910,6 +5200,7 @@ export function CrudDashboard({
     !quickWizard &&
     !studentPhones &&
     activeEntityKey !== "points" &&
+    !(activeEntityKey === "pages" && isPagesTableHidden) &&
     mode !== "create" &&
     mode !== "edit";
 
@@ -4937,7 +5228,7 @@ export function CrudDashboard({
 
   return (
     <div className="min-w-0 space-y-4 sm:space-y-6">
-      <div className="relative z-50 flex min-w-0 items-start justify-between gap-3 px-1 xl:pr-80">
+      <div className="relative z-50 flex min-w-0 flex-col gap-3 px-1 sm:flex-row sm:items-start sm:justify-between xl:pr-80">
         <div className="flex min-w-0 items-start gap-2">
           <button
             aria-expanded={isSidebarOpen}
@@ -4951,9 +5242,14 @@ export function CrudDashboard({
           </button>
           <div className="min-w-0 text-right">
             <p className="text-sm font-bold text-cedar">{activeCourse.name}</p>
-            <h1 className="mt-0.5 truncate text-2xl font-bold text-ink sm:text-3xl">
+            <h1 className="mt-0.5 text-2xl font-bold leading-tight text-ink sm:text-3xl">
               {activeEntity.label}
             </h1>
+            {activeCohort?.name ? (
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                الدفعة: {activeCohort.name}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -5076,7 +5372,9 @@ export function CrudDashboard({
             activeCourse={activeCourse}
             activeSchema={activeSchema}
             entityDefinitions={entityDefinitions}
+            isTableHidden={isPagesTableHidden}
             onCreated={invalidateDashboardQueries}
+            onToggleTable={() => setIsPagesTableHidden((current) => !current)}
             relationOptions={relationOptions}
           />
         ) : null}
@@ -5419,6 +5717,13 @@ function CrudRowsTable({
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const showsGroupColorColumn = ["groups", "students", "teachers"].includes(activeEntityKey);
+  const visibleListFields = useMemo(
+    () =>
+      activeEntity.listFields.filter(
+        (key) => !(activeEntityKey === "pages" && key === "id"),
+      ),
+    [activeEntity.listFields, activeEntityKey],
+  );
   const columns = useMemo<ColumnDef<CrudRow>[]>(
     () => [
       ...(showsGroupColorColumn
@@ -5446,7 +5751,7 @@ function CrudRowsTable({
             } satisfies ColumnDef<CrudRow>,
           ]
         : []),
-      ...activeEntity.listFields.map(
+      ...visibleListFields.map(
         (key): ColumnDef<CrudRow> => ({
           accessorFn: (row) => {
             const field = getField(activeEntity, key);
@@ -5541,9 +5846,9 @@ function CrudRowsTable({
         cell: ({ row }) => {
           if (row.original.isGroupedPageRow) {
             return (
-              <span className="inline-flex whitespace-nowrap rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
-                ملخص
-              </span>
+              <div className="flex gap-1">
+                <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => onDelete(row.original)} />
+              </div>
             );
           }
 
@@ -5572,6 +5877,7 @@ function CrudRowsTable({
       onView,
       relationOptions,
       showsGroupColorColumn,
+      visibleListFields,
     ],
   );
   const table = useReactTable({
@@ -5582,16 +5888,17 @@ function CrudRowsTable({
     onSortingChange: setSorting,
     state: { sorting },
   });
+  const tableWidthClass = activeEntityKey === "pages" ? "min-w-[42rem]" : "min-w-full";
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full table-fixed divide-y divide-slate-200 text-right text-xs sm:text-sm">
+      <table className={`${tableWidthClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
         <thead className="bg-mist/70">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th
-                  className={`break-words px-0.5 py-1 font-bold leading-5 text-slate-600 sm:px-1 ${
+                  className={`px-2 py-2 font-bold leading-5 text-slate-600 ${
                     header.column.id === "groupColor"
                       ? "w-8"
                       : header.column.id === "actions"
@@ -5633,7 +5940,7 @@ function CrudRowsTable({
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
-                    className="break-words px-0.5 py-1 leading-5 text-slate-700 sm:px-1"
+                    className="px-2 py-2 leading-5 text-slate-700"
                     key={cell.id}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
