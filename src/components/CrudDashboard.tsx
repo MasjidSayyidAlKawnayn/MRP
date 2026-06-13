@@ -5888,11 +5888,14 @@ function CrudRowsTable({
     onSortingChange: setSorting,
     state: { sorting },
   });
-  const tableWidthClass = activeEntityKey === "pages" ? "min-w-[42rem]" : "min-w-full";
+  const tableLayoutClass =
+    activeEntityKey === "pages"
+      ? "w-full table-auto"
+      : "w-max min-w-full table-auto";
 
   return (
     <div className="overflow-x-auto">
-      <table className={`w-max table-auto ${tableWidthClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
+      <table className={`${tableLayoutClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
         <thead className="bg-mist/70">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
