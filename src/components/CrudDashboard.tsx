@@ -2837,11 +2837,11 @@ function PointsWorkspace({
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full divide-y divide-slate-200 text-right text-sm">
+        <table className="w-max min-w-full table-auto divide-y divide-slate-200 text-right text-sm">
           <thead className="bg-mist/70">
             <tr>
               {leaderboardHeaders.map(({ id, label, sortable }) => (
-                <th className="px-3 py-2 font-bold text-slate-600" key={id}>
+                <th className="whitespace-nowrap px-3 py-2 font-bold text-slate-600" key={id}>
                   <SortableHeader
                     canSort={sortable}
                     label={label}
@@ -2863,15 +2863,15 @@ function PointsWorkspace({
               const group = groups.find((currentGroup) => String(currentGroup.id) === String(student.groupId));
               return (
                 <tr className="hover:bg-cedar/5" key={String(student.id)}>
-                  <td className="px-3 py-2 font-bold text-cedar">#{index + 1}</td>
-                  <td className="px-3 py-2 font-bold text-ink">{getStudentName(student)}</td>
-                  <td className="px-3 py-2 text-slate-600">{formatValue(group?.name)}</td>
-                  <td className="px-3 py-2">{stats.memorizedPages}</td>
-                  <td className="px-3 py-2">{stats.pagePoints}</td>
-                  <td className="px-3 py-2">{stats.manualPoints}</td>
-                  <td className="px-3 py-2 font-bold text-ink">{stats.totalPoints}</td>
-                  <td className="px-3 py-2">{recentPoints}</td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2 font-bold text-cedar">#{index + 1}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-bold text-ink">{getStudentName(student)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{formatValue(group?.name)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{stats.memorizedPages}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{stats.pagePoints}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{stats.manualPoints}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-bold text-ink">{stats.totalPoints}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{recentPoints}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
                     <ActionButton compact icon={Eye} label={ui.view} onClick={() => onNavigateStudent(student)} />
                   </td>
                 </tr>
@@ -5892,13 +5892,13 @@ function CrudRowsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className={`${tableWidthClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
+      <table className={`w-max table-auto ${tableWidthClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
         <thead className="bg-mist/70">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th
-                  className={`px-2 py-2 font-bold leading-5 text-slate-600 ${
+                  className={`whitespace-nowrap px-2 py-2 font-bold leading-5 text-slate-600 ${
                     header.column.id === "groupColor"
                       ? "w-8"
                       : header.column.id === "actions"
@@ -5940,7 +5940,7 @@ function CrudRowsTable({
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
-                    className="px-2 py-2 leading-5 text-slate-700"
+                    className="align-top px-2 py-2 leading-5 text-slate-700"
                     key={cell.id}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
