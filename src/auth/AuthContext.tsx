@@ -10,6 +10,7 @@ import {
 } from "react";
 import { authClient } from "./client";
 import { getSchemaClient } from "../data/neon";
+import { resolveAdminAccess } from "./adminAccess";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not sign out.";
@@ -31,23 +32,6 @@ function getBooleanField(value: unknown, key: string) {
 
   const field = (value as Record<string, unknown>)[key];
   return typeof field === "boolean" ? field : undefined;
-}
-
-function getRpcBoolean(value: unknown) {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (Array.isArray(value) && value.length > 0) {
-    return getRpcBoolean(value[0]);
-  }
-
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return getRpcBoolean(record.is_app_admin ?? record.result);
-  }
-
-  return false;
 }
 
 export interface AuthContextValue {
@@ -107,26 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     async function checkAdminAccess() {
-      try {
-        const response = await getSchemaClient("public").rpc("is_app_admin");
+      const isAdmin = await resolveAdminAccess(
+        () => getSchemaClient("public").rpc("is_app_admin"),
+        { isCancelled: () => !isCurrent },
+      );
 
-        if (!isCurrent) {
-          return;
-        }
-
+      if (isCurrent) {
         setAdminCheck({
-          isAdmin: !response.error && getRpcBoolean(response.data),
+          isAdmin,
           isLoading: false,
           userId,
         });
-      } catch {
-        if (isCurrent) {
-          setAdminCheck({
-            isAdmin: false,
-            isLoading: false,
-            userId,
-          });
-        }
       }
     }
 
