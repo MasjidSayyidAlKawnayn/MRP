@@ -2920,6 +2920,54 @@ function PointsWorkspace({
   );
 }
 
+const additionPointPresets = [
+  {
+    amount: 10,
+    label: "قراءة الصفحة نظراً",
+    reason: "قراءة الصفحة المطلوب حفظها نظراً بشكل جيد",
+  },
+  { amount: 10, label: "حفظ صفحة مقبول", reason: "حفظ صفحة مقبول" },
+  { amount: 10, label: "برنامج صلاة", reason: "برنامج صلاة" },
+  {
+    amount: 15,
+    label: "حفظ صفحة جيد جداً أو ممتاز",
+    reason: "حفظ صفحة جيد جداً أو ممتاز",
+  },
+  { amount: 10, label: "وظيفة السبر", reason: "حفظ وظيفة السبر" },
+  {
+    amount: 5,
+    label: "لباس السنة",
+    reason: "لباس السنة (كلابية وطائية)",
+  },
+  {
+    amount: 5,
+    label: "إحضار المصحف",
+    reason: "إحضار المصحف الخاص بالطالب",
+  },
+  {
+    amount: 5,
+    label: "صلاة الجماعة",
+    reason: "حضور صلاة الجماعة (العصر)",
+  },
+  {
+    amount: 10,
+    label: "صلاة الفجر",
+    reason: "حضور صلاة الفجر مع جماعة في المسجد",
+  },
+  { amount: 50, label: "سبر الأوقاف", reason: "سبر الأوقاف (التقوى)" },
+  {
+    amount: 15,
+    label: "الآداب",
+    reason: "الآداب ضمن الحلقة والمسجد",
+  },
+] as const;
+
+const deductionPointPresets = [
+  { amount: -50, label: "غياب يوم", reason: "غياب يوم واحد" },
+  { amount: -10, label: "شغب النشاط", reason: "شغب ضمن النشاط" },
+  { amount: -10, label: "شغب الحلقة", reason: "شغب ضمن الحلقة" },
+] as const;
+
 function ManualPointsPage({
   activeCourse,
   activeSchema,
@@ -2935,20 +2983,7 @@ function ManualPointsPage({
   onBack: () => void;
   onCreated: () => Promise<void>;
 }) {
-  const pointPresets = [
-    { amount: 10, label: "قراءة الصفحة نظرا", reason: "قراءة الصفحة المطلوب حفظها نظرا بشكل جيد" },
-    { amount: 10, label: "برنامج صالة", reason: "برنامج صالة" },
-    { amount: 10, label: "وظيفة السبر", reason: "حفظ وظيفة السبر" },
-    { amount: 5, label: "لباس السنة", reason: "لباس السنة (كاّل بية وطائية)" },
-    { amount: 5, label: "إحضار المصحف", reason: "إحضار المصحف الخاص بالطالب" },
-    { amount: 5, label: "صلاة الجماعة", reason: "حضور صالة الجماعة (العصر)" },
-    { amount: 10, label: "صلاة الفجر", reason: "حضور صالة الفجر مع جماعة في المسجد" },
-    { amount: 50, label: "سبر الأوقاف", reason: "سبر الأوقاف (التقوى)" },
-    { amount: 15, label: "الآداب", reason: "اآلداب ضمن الحلقة والمسجد" },
-    { amount: -50, label: "غياب يوم", reason: "غياب يوم واحد" },
-    { amount: -10, label: "شغب النشاط", reason: "شغب ضمن النشاط" },
-    { amount: -10, label: "شغب الحلقة", reason: "شغب ضمن الحلقة" },
-  ] as const;
+  const pointPresets = [...additionPointPresets, ...deductionPointPresets];
   const [studentId, setStudentId] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayDateString());
   const [amount, setAmount] = useState("");
@@ -3087,11 +3122,7 @@ function DeductionsPage({
   onCreated: () => Promise<void>;
   relationOptions: RelationOptions;
 }) {
-  const presets = [
-    { amount: 50, label: "غياب يوم", reason: "غياب يوم واحد" },
-    { amount: 10, label: "شغب النشاط", reason: "شغب ضمن النشاط" },
-    { amount: 10, label: "شغب الحلقة", reason: "شغب ضمن الحلقة" },
-  ] as const;
+  const presets = deductionPointPresets;
   const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
   const transactions =
     relationOptions[`${activeSchema}.manualPointTransactions` as EntityId] ?? [];
@@ -3107,7 +3138,7 @@ function DeductionsPage({
   );
   const [studentId, setStudentId] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayDateString());
-  const [amount, setAmount] = useState("10");
+  const [amount, setAmount] = useState(String(Math.abs(presets[1].amount)));
   const [reason, setReason] = useState<string>(presets[1].reason);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3173,14 +3204,14 @@ function DeductionsPage({
               <Button
                 key={preset.label}
                 onClick={() => {
-                  setAmount(String(preset.amount));
+                  setAmount(String(Math.abs(preset.amount)));
                   setReason(preset.reason);
                 }}
                 type="button"
                 variant="outline"
               >
                 <MinusCircle className="h-4 w-4" aria-hidden="true" />
-                {preset.label} (-{preset.amount})
+                {preset.label} ({preset.amount})
               </Button>
             ))}
           </div>
