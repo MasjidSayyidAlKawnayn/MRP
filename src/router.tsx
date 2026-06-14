@@ -78,6 +78,10 @@ const manualPointsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseSlug/dashboard/points/manual",
 });
+const deductionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseSlug/dashboard/points/deductions",
+});
 
 const createRoutePage = createRoute({
   getParentRoute: () => rootRoute,
@@ -163,6 +167,7 @@ export const router = createRouter({
     cohortAttendanceChartsRoute,
     cohortAttendanceWizardRoute,
     manualPointsRoute,
+    deductionsRoute,
     createRoutePage,
     detailRoute,
     editRoute,

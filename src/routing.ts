@@ -66,13 +66,17 @@ export function dashboardPath({
   entity: EntityKey;
   mode?: ViewMode;
   rowId?: CrudValue;
-  subpage?: "manual" | "take" | "charts" | "phones" | "wizard";
+  subpage?: "deductions" | "manual" | "take" | "charts" | "phones" | "wizard";
 }) {
   const cohortSegment = cohortTag ? `/cohorts/${cohortTag}` : "";
   const basePath = `/courses/${courseSlug}${cohortSegment}/dashboard/${entity}`;
 
   if (subpage === "manual") {
     return `${basePath}/manual`;
+  }
+
+  if (subpage === "deductions") {
+    return `${basePath}/deductions`;
   }
 
   if (subpage === "take") {

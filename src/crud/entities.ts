@@ -417,6 +417,7 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
     label: "Assignments",
     singularLabel: "Assignment",
     description: "Create, update, and track assignments for students.",
+    showInNav: false,
     fields: [
       idField,
       {
@@ -751,7 +752,7 @@ const baseEntityDefinitions: Omit<EntityDefinition, "id" | "schema">[] = [
         label: "Status",
         type: "text",
         required: true,
-        helpText: "Use present or late.",
+        helpText: "Use present, late, or absent.",
       },
       ...timestamps,
     ],
@@ -950,7 +951,7 @@ const arabicHelpText: Record<string, string> = {
     "\u0631\u0642\u0645 \u0627\u0644\u0648\u0644\u064A \u0627\u0644\u0623\u0633\u0627\u0633\u064A \u0644\u0644\u062A\u0648\u0627\u0635\u0644 \u0627\u0644\u064A\u0648\u0645\u064A\u060C \u0642\u0628\u0644 \u0627\u0644\u062A\u0648\u0627\u0635\u0644 \u0645\u0639 \u0643\u0644\u0627 \u0627\u0644\u0648\u0627\u0644\u062F\u064A\u0646.",
   sequenceOnDate:
     "\u064A\u0633\u062A\u062E\u062F\u0645 \u0639\u0646\u062F \u0648\u062C\u0648\u062F \u0623\u0643\u062B\u0631 \u0645\u0646 \u0639\u0645\u0648\u062F \u062D\u0636\u0648\u0631 \u0641\u064A \u0627\u0644\u064A\u0648\u0645 \u0646\u0641\u0633\u0647.",
-  status: "\u0627\u0633\u062A\u062E\u062F\u0645 \u062D\u0627\u0636\u0631 \u0623\u0648 \u0645\u062A\u0623\u062E\u0631.",
+  status: "\u0627\u0633\u062A\u062E\u062F\u0645 \u062D\u0627\u0636\u0631 \u0623\u0648 \u0645\u062A\u0623\u062E\u0631 \u0623\u0648 \u063A\u0627\u0626\u0628.",
 };
 
 function withSchemaRelationIds(field: FieldDefinition, schema: SchemaName) {

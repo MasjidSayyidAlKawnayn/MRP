@@ -16,6 +16,7 @@ export type WorkspaceRouteState = {
   attendanceWizard?: boolean;
   canonicalPath?: string;
   cohortTag?: string;
+  deductions?: boolean;
   entity: EntityKey;
   manualPoints?: boolean;
   mode: ViewMode;
@@ -335,6 +336,26 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
       courseSlug: manualPoints.courseSlug,
       entity: "points",
       manualPoints: true,
+      mode: "list",
+      page: "dashboard",
+      search,
+    };
+  }
+
+  const deductions = matchRoute({
+    to: "/courses/$courseSlug/dashboard/points/deductions",
+    fuzzy: false,
+  });
+  if (deductions) {
+    return {
+      canonicalPath: dashboardPath({
+        courseSlug: deductions.courseSlug,
+        entity: "points",
+        subpage: "deductions",
+      }),
+      courseSlug: deductions.courseSlug,
+      deductions: true,
+      entity: "points",
       mode: "list",
       page: "dashboard",
       search,
