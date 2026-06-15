@@ -826,9 +826,9 @@ function SignedInWorkspace({
                 ? "wizard"
                 : routeState.manualPoints
                   ? "manual"
-                  : routeState.deductions
-                    ? "deductions"
-                    : undefined,
+                  : routeState.pointTransactionMode
+                    ? routeState.pointTransactionMode
+                  : undefined,
         }),
         replace: true,
         search: routeState.search,
@@ -1191,7 +1191,7 @@ function SignedInWorkspace({
       attendanceTaking={routeState.attendanceTaking}
       quickWizard={routeState.attendanceWizard}
       manualPoints={routeState.manualPoints}
-      deductions={routeState.deductions}
+      pointTransactionMode={routeState.pointTransactionMode}
       studentPhones={routeState.studentPhones}
       topAccessory={topAccessory}
     />

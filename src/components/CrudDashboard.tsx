@@ -42,7 +42,7 @@ import {
   ListChecks,
   Loader2,
   Menu,
-  MinusCircle,
+  Minus,
   Pencil,
   Phone,
   PhoneCall,
@@ -59,7 +59,6 @@ import {
   UserRound,
   UsersRound,
   X,
-  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -750,20 +749,12 @@ function getDefaultAttendanceSession(sessions: CrudRow[]) {
 }
 
 function getStatusLabel(status: CrudValue | undefined) {
-  if (status === "late") {
-    return "متأخر";
-  }
-
-  return status === "absent" ? "غائب" : "حاضر";
+  return status === "late" ? "متأخر" : "حاضر";
 }
 
 function getStatusClasses(status: CrudValue | undefined) {
-  if (status === "late") {
-    return "border-amber-200 bg-amber-50 text-amber-800";
-  }
-
-  return status === "absent"
-    ? "border-red-200 bg-red-50 text-red-800"
+  return status === "late"
+    ? "border-amber-200 bg-amber-50 text-amber-800"
     : "border-emerald-200 bg-emerald-50 text-emerald-800";
 }
 
@@ -1064,10 +1055,11 @@ function EntityNav({
   onClose,
   onSelectAttendanceTaking,
   onSelectAttendanceCharts,
-  onSelectDeductions,
+  onSelectPointAdditions,
+  onSelectPointDeductions,
   onSelectStudentPhones,
+  pointTransactionMode,
   showAttendanceChartsActive,
-  showDeductionsActive,
   showStudentPhonesActive,
 }: {
   activeEntityId: EntityId;
@@ -1078,10 +1070,11 @@ function EntityNav({
   onClose: () => void;
   onSelectAttendanceTaking: () => void;
   onSelectAttendanceCharts: () => void;
-  onSelectDeductions: () => void;
+  onSelectPointAdditions: () => void;
+  onSelectPointDeductions: () => void;
   onSelectStudentPhones: () => void;
+  pointTransactionMode?: "additions" | "deductions";
   showAttendanceChartsActive: boolean;
-  showDeductionsActive: boolean;
   showStudentPhonesActive: boolean;
 }) {
   const navItems = entityDefinitions.filter((entity) => entity.showInNav !== false);
@@ -1182,26 +1175,48 @@ function EntityNav({
               </button>
             ) : null}
             {entity.id === `${activeSchema}.points` ? (
-              <button
-                className={`mr-8 flex min-h-12 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
-                  showDeductionsActive
-                    ? "bg-red-50 text-red-700"
-                    : "text-slate-600 hover:bg-red-50 hover:text-red-700"
-                }`}
-                onClick={() => {
-                  onSelectDeductions();
-                  onClose();
-                }}
-                type="button"
-              >
-                <MinusCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block truncate">الحسميات</span>
-                  <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
-                    تسجيل ومراجعة النقاط المحسومة
+              <>
+                <button
+                  className={`mr-8 flex min-h-12 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
+                    pointTransactionMode === "additions"
+                      ? "bg-cedar/10 text-cedar"
+                      : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
+                  }`}
+                  onClick={() => {
+                    onSelectPointAdditions();
+                    onClose();
+                  }}
+                  type="button"
+                >
+                  <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate">إضافة النقاط</span>
+                    <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                      تسجيل نقاط إضافية للطلاب
+                    </span>
                   </span>
-                </span>
-              </button>
+                </button>
+                <button
+                  className={`mr-8 flex min-h-12 min-w-0 flex-row-reverse items-center gap-3 rounded-xl px-3 py-2 text-right text-sm font-bold transition ${
+                    pointTransactionMode === "deductions"
+                      ? "bg-cedar/10 text-cedar"
+                      : "text-slate-600 hover:bg-cedar/5 hover:text-cedar"
+                  }`}
+                  onClick={() => {
+                    onSelectPointDeductions();
+                    onClose();
+                  }}
+                  type="button"
+                >
+                  <Minus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate">الحسومات</span>
+                    <span className="mt-0.5 block truncate text-xs font-medium opacity-75">
+                      تسجيل ومراجعة النقاط المحسومة
+                    </span>
+                  </span>
+                </button>
+              </>
             ) : null}
           </div>
           );
@@ -2728,12 +2743,14 @@ function PageTierSettings({
 function PointsWorkspace({
   activeSchema,
   relationOptions,
-  onOpenManualPoints,
+  onOpenAdditions,
+  onOpenDeductions,
   onNavigateStudent,
 }: {
   activeSchema: SchemaName;
   relationOptions: RelationOptions;
-  onOpenManualPoints: () => void;
+  onOpenAdditions: () => void;
+  onOpenDeductions: () => void;
   onNavigateStudent: (student: CrudRow) => void;
 }) {
   const [rankMode, setRankMode] = useState<"points" | "pages" | "recent">("points");
@@ -2743,6 +2760,9 @@ function PointsWorkspace({
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [search, setSearch] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
   const groups = relationOptions[`${activeSchema}.groups` as EntityId] ?? [];
   const pages = relationOptions[`${activeSchema}.pages` as EntityId] ?? [];
@@ -2837,6 +2857,27 @@ function PointsWorkspace({
     });
   }
 
+  async function handleExportPdf() {
+    if (!tableRef.current || sortedStudents.length === 0) {
+      return;
+    }
+
+    setExportError(null);
+    setExportingPdf(true);
+
+    try {
+      await exportTableToPdf(
+        tableRef.current,
+        "ترتيب الطلاب والنقاط",
+        "points-leaderboard.pdf",
+      );
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "تعذر إنشاء ملف PDF.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
       <div className="space-y-3 border-b border-slate-200/80 p-4">
@@ -2845,7 +2886,7 @@ function PointsWorkspace({
             <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
             <h2 className="mt-1 text-2xl font-bold text-ink">ترتيب الطلاب والحفظ</h2>
           </div>
-          <div className="grid gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-center">
+          <div className="grid gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto_auto_auto] sm:items-center">
             <select className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setRankMode(event.target.value as typeof rankMode)} value={rankMode}>
               <option value="points">حسب مجموع النقاط</option>
               <option value="pages">حسب صفحات الحفظ</option>
@@ -2860,24 +2901,56 @@ function PointsWorkspace({
               placeholder="بحث عن طالب"
               value={search}
             />
+            <Button
+              className="h-11 gap-2 whitespace-nowrap"
+              disabled={exportingPdf || sortedStudents.length === 0}
+              onClick={() => void handleExportPdf()}
+              type="button"
+            >
+              {exportingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden="true" />
+              )}
+              تصدير PDF
+            </Button>
             <button
-              aria-label="إضافة نقاط يدوية"
+              aria-label="إضافة نقاط"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-cedar text-white shadow-lg shadow-cedar/20 transition hover:bg-palm"
-              onClick={onOpenManualPoints}
-              title="إضافة نقاط يدوية"
+              onClick={onOpenAdditions}
+              title="إضافة نقاط"
               type="button"
             >
               <Plus className="h-5 w-5" aria-hidden="true" />
             </button>
+            <button
+              aria-label="خصم نقاط"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-amber-600 text-white shadow-lg shadow-amber-600/20 transition hover:bg-amber-700"
+              onClick={onOpenDeductions}
+              title="خصم نقاط"
+              type="button"
+            >
+              <Minus className="h-5 w-5" aria-hidden="true" />
+            </button>
           </div>
         </div>
+        {exportError ? (
+          <p className="text-xs text-amber-700">{exportError}</p>
+        ) : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-max min-w-full table-auto divide-y divide-slate-200 text-right text-sm">
+        <table
+          className="w-max min-w-full table-auto divide-y divide-slate-200 text-right text-sm"
+          ref={tableRef}
+        >
           <thead className="bg-mist/70">
             <tr>
               {leaderboardHeaders.map(({ id, label, sortable }) => (
-                <th className="whitespace-nowrap px-3 py-2 font-bold text-slate-600" key={id}>
+                <th
+                  className="whitespace-nowrap px-3 py-2 font-bold text-slate-600"
+                  data-pdf-ignore={id === "actions" ? true : undefined}
+                  key={id}
+                >
                   <SortableHeader
                     canSort={sortable}
                     label={label}
@@ -2907,7 +2980,7 @@ function PointsWorkspace({
                   <td className="whitespace-nowrap px-3 py-2">{stats.manualPoints}</td>
                   <td className="whitespace-nowrap px-3 py-2 font-bold text-ink">{stats.totalPoints}</td>
                   <td className="whitespace-nowrap px-3 py-2">{recentPoints}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2" data-pdf-ignore>
                     <ActionButton compact icon={Eye} label={ui.view} onClick={() => onNavigateStudent(student)} />
                   </td>
                 </tr>
@@ -2920,58 +2993,11 @@ function PointsWorkspace({
   );
 }
 
-const additionPointPresets = [
-  {
-    amount: 10,
-    label: "قراءة الصفحة نظراً",
-    reason: "قراءة الصفحة المطلوب حفظها نظراً بشكل جيد",
-  },
-  { amount: 10, label: "حفظ صفحة مقبول", reason: "حفظ صفحة مقبول" },
-  { amount: 10, label: "برنامج صلاة", reason: "برنامج صلاة" },
-  {
-    amount: 15,
-    label: "حفظ صفحة جيد جداً أو ممتاز",
-    reason: "حفظ صفحة جيد جداً أو ممتاز",
-  },
-  { amount: 10, label: "وظيفة السبر", reason: "حفظ وظيفة السبر" },
-  {
-    amount: 5,
-    label: "لباس السنة",
-    reason: "لباس السنة (كلابية وطائية)",
-  },
-  {
-    amount: 5,
-    label: "إحضار المصحف",
-    reason: "إحضار المصحف الخاص بالطالب",
-  },
-  {
-    amount: 5,
-    label: "صلاة الجماعة",
-    reason: "حضور صلاة الجماعة (العصر)",
-  },
-  {
-    amount: 10,
-    label: "صلاة الفجر",
-    reason: "حضور صلاة الفجر مع جماعة في المسجد",
-  },
-  { amount: 50, label: "سبر الأوقاف", reason: "سبر الأوقاف (التقوى)" },
-  {
-    amount: 15,
-    label: "الآداب",
-    reason: "الآداب ضمن الحلقة والمسجد",
-  },
-] as const;
-
-const deductionPointPresets = [
-  { amount: -50, label: "غياب يوم", reason: "غياب يوم واحد" },
-  { amount: -10, label: "شغب النشاط", reason: "شغب ضمن النشاط" },
-  { amount: -10, label: "شغب الحلقة", reason: "شغب ضمن الحلقة" },
-] as const;
-
-function ManualPointsPage({
+function PointTransactionsPage({
   activeCourse,
   activeSchema,
   entityDefinitions,
+  mode,
   relationOptions,
   onBack,
   onCreated,
@@ -2979,11 +3005,31 @@ function ManualPointsPage({
   activeCourse: Course;
   activeSchema: SchemaName;
   entityDefinitions: EntityDefinition[];
+  mode: "additions" | "deductions";
   relationOptions: RelationOptions;
   onBack: () => void;
   onCreated: () => Promise<void>;
 }) {
-  const pointPresets = [...additionPointPresets, ...deductionPointPresets];
+  const additionPresets = [
+    { amount: 10, label: "قراءة الصفحة نظرا", reason: "قراءة الصفحة المطلوب حفظها نظرا بشكل جيد" },
+    { amount: 10, label: "حفظ صفحة مقبول", reason: "حفظ صفحة مقبول" },
+    { amount: 10, label: "برنامج صلاة", reason: "برنامج صلاة" },
+    { amount: 15, label: "حفظ صفحة جيد جدا أو ممتاز", reason: "حفظ صفحة جيد جدا أو ممتاز" },
+    { amount: 10, label: "وظيفة السبر", reason: "حفظ وظيفة السبر" },
+    { amount: 5, label: "لباس السنة", reason: "لباس السنة (كلابية وطاقية)" },
+    { amount: 5, label: "إحضار المصحف", reason: "إحضار المصحف الخاص بالطالب" },
+    { amount: 5, label: "صلاة الجماعة", reason: "حضور صلاة الجماعة (العصر)" },
+    { amount: 10, label: "صلاة الفجر", reason: "حضور صلاة الفجر مع جماعة في المسجد" },
+    { amount: 50, label: "سبر الأوقاف", reason: "سبر الأوقاف (التقوى)" },
+    { amount: 15, label: "الآداب", reason: "الآداب ضمن الحلقة والمسجد" },
+  ] as const;
+  const deductionPresets = [
+    { amount: -50, label: "غياب يوم", reason: "غياب يوم واحد" },
+    { amount: -10, label: "شغب النشاط", reason: "شغب ضمن النشاط" },
+    { amount: -10, label: "شغب الحلقة", reason: "شغب ضمن الحلقة" },
+  ] as const;
+  const pointPresets = mode === "additions" ? additionPresets : deductionPresets;
+  const isAdditions = mode === "additions";
   const [studentId, setStudentId] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayDateString());
   const [amount, setAmount] = useState("");
@@ -3006,8 +3052,19 @@ function ManualPointsPage({
   async function submitTransaction(nextAmount: number, nextReason: string) {
     setError(null);
 
-    if (!manualEntity || !studentId || !Number.isInteger(nextAmount) || !nextReason.trim()) {
-      setError("اختر الطالب وأدخل مقدار النقاط والسبب.");
+    const hasValidSign = isAdditions ? nextAmount > 0 : nextAmount < 0;
+    if (
+      !manualEntity ||
+      !studentId ||
+      !Number.isInteger(nextAmount) ||
+      !hasValidSign ||
+      !nextReason.trim()
+    ) {
+      setError(
+        isAdditions
+          ? "اختر الطالب وأدخل نقاطا موجبة والسبب."
+          : "اختر الطالب وأدخل نقاطا سالبة والسبب.",
+      );
       return;
     }
 
@@ -3046,9 +3103,11 @@ function ManualPointsPage({
       <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 p-4">
         <div>
           <p className="text-sm font-bold text-cedar">لوحة النقاط</p>
-          <h2 className="mt-1 text-2xl font-bold text-ink">إضافة نقاط يدوية</h2>
+          <h2 className="mt-1 text-2xl font-bold text-ink">
+            {isAdditions ? "إضافة نقاط" : "خصم نقاط"}
+          </h2>
           <p className="mt-1 text-sm text-slate-500">
-            نقاط الحفظ بالصفحات لا تضاف هنا لأنها تسجل تلقائيا عند إدخال الصفحات.
+            اختر اختصارا من لائحة النقاط أو أدخل حركة مخصصة.
           </p>
         </div>
         <button
@@ -3062,15 +3121,18 @@ function ManualPointsPage({
         </button>
       </div>
       <div className="border-b border-slate-200/80 p-4">
-        <p className="text-sm font-bold text-slate-700">اختصارات سريعة من لائحة النقاط</p>
+        <p className="text-sm font-bold text-slate-700">
+          {isAdditions ? "اختصارات الإضافات" : "اختصارات الخصم"}
+        </p>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {pointPresets.map((preset) => (
             <button
-              className={`rounded-2xl border px-3 py-3 text-right transition ${
-                preset.amount > 0
+              className={cn(
+                "rounded-2xl border px-3 py-3 text-right transition",
+                isAdditions
                   ? "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:bg-emerald-100"
-                  : "border-amber-200 bg-amber-50/70 text-amber-900 hover:bg-amber-100"
-              }`}
+                  : "border-amber-200 bg-amber-50/70 text-amber-900 hover:bg-amber-100",
+              )}
               key={`${preset.amount}-${preset.reason}`}
               onClick={() => handlePresetSelect(preset)}
               type="button"
@@ -3093,7 +3155,15 @@ function ManualPointsPage({
           ))}
         </select>
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setTransactionDate(event.target.value)} type="date" value={transactionDate} />
-        <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setAmount(event.target.value)} placeholder="نقاط + أو -" type="number" value={amount} />
+        <input
+          className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+          max={isAdditions ? undefined : -1}
+          min={isAdditions ? 1 : undefined}
+          onChange={(event) => setAmount(event.target.value)}
+          placeholder={isAdditions ? "نقاط موجبة" : "نقاط سالبة"}
+          type="number"
+          value={amount}
+        />
         <input className="h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="السبب" value={reason} />
         {error ? <p className="order-last rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-5">{error}</p> : null}
         <button
@@ -3105,168 +3175,6 @@ function ManualPointsPage({
           <span>{isSaving ? ui.saving : "إضافة حركة"}</span>
         </button>
       </form>
-    </div>
-  );
-}
-
-function DeductionsPage({
-  activeCourse,
-  activeSchema,
-  entityDefinitions,
-  onCreated,
-  relationOptions,
-}: {
-  activeCourse: Course;
-  activeSchema: SchemaName;
-  entityDefinitions: EntityDefinition[];
-  onCreated: () => Promise<void>;
-  relationOptions: RelationOptions;
-}) {
-  const presets = deductionPointPresets;
-  const students = relationOptions[`${activeSchema}.students` as EntityId] ?? [];
-  const transactions =
-    relationOptions[`${activeSchema}.manualPointTransactions` as EntityId] ?? [];
-  const deductions = transactions
-    .filter((transaction) => getNumberValue(transaction.amount) < 0)
-    .sort((left, right) =>
-      String(right.transactionDate ?? "").localeCompare(String(left.transactionDate ?? "")),
-    );
-  const manualEntity = getEntityByKey(
-    entityDefinitions,
-    activeSchema,
-    "manualPointTransactions",
-  );
-  const [studentId, setStudentId] = useState("");
-  const [transactionDate, setTransactionDate] = useState(getTodayDateString());
-  const [amount, setAmount] = useState(String(Math.abs(presets[1].amount)));
-  const [reason, setReason] = useState<string>(presets[1].reason);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const total = deductions.reduce(
-    (sum, transaction) => sum + Math.abs(getNumberValue(transaction.amount)),
-    0,
-  );
-
-  useEffect(() => {
-    if (!studentId && students[0]?.id !== undefined) {
-      setStudentId(String(students[0].id));
-    }
-  }, [studentId, students]);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const deductionAmount = Math.abs(Number(amount));
-
-    if (!manualEntity || !studentId || !Number.isInteger(deductionAmount) || deductionAmount <= 0 || !reason.trim()) {
-      setError("اختر الطالب وأدخل مقدار حسم صحيحاً والسبب.");
-      return;
-    }
-
-    setError(null);
-    setIsSaving(true);
-    try {
-      await createRow(
-        manualEntity,
-        {
-          studentId: Number(studentId),
-          transactionDate,
-          amount: -deductionAmount,
-          reason: reason.trim(),
-        },
-        activeCourse,
-      );
-      await onCreated();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : ui.createError);
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
-          <p className="text-sm font-bold text-red-700">إجمالي الحسميات</p>
-          <p className="mt-2 text-3xl font-bold text-red-900">{total} نقطة</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-sm font-bold text-slate-600">عدد الحركات</p>
-          <p className="mt-2 text-3xl font-bold text-ink">{deductions.length}</p>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
-        <div className="border-b border-slate-200 p-4">
-          <p className="text-sm font-bold text-red-700">حسم جديد</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {presets.map((preset) => (
-              <Button
-                key={preset.label}
-                onClick={() => {
-                  setAmount(String(Math.abs(preset.amount)));
-                  setReason(preset.reason);
-                }}
-                type="button"
-                variant="outline"
-              >
-                <MinusCircle className="h-4 w-4" aria-hidden="true" />
-                {preset.label} ({preset.amount})
-              </Button>
-            ))}
-          </div>
-        </div>
-        <form className="grid gap-3 p-4 md:grid-cols-[1.2fr_0.8fr_0.7fr_1.2fr_auto] md:items-end" onSubmit={handleSubmit}>
-          <select className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" onChange={(event) => setStudentId(event.target.value)} value={studentId}>
-            {students.map((student) => (
-              <option key={String(student.id)} value={String(student.id)}>{getStudentName(student)}</option>
-            ))}
-          </select>
-          <input className="h-11 rounded-xl border border-slate-200 px-3 text-sm" onChange={(event) => setTransactionDate(event.target.value)} type="date" value={transactionDate} />
-          <input className="h-11 rounded-xl border border-slate-200 px-3 text-sm" min="1" onChange={(event) => setAmount(event.target.value)} placeholder="المقدار" type="number" value={amount} />
-          <input className="h-11 rounded-xl border border-slate-200 px-3 text-sm" onChange={(event) => setReason(event.target.value)} placeholder="سبب الحسم" value={reason} />
-          <Button className="h-11 bg-red-700 hover:bg-red-800" disabled={isSaving} type="submit">
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <MinusCircle className="h-4 w-4" />}
-            تسجيل الحسم
-          </Button>
-          {error ? <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 md:col-span-5">{error}</p> : null}
-        </form>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
-        <div className="border-b border-slate-200 p-4">
-          <h2 className="text-lg font-bold text-ink">سجل الحسميات</h2>
-        </div>
-        {deductions.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">لا توجد حسميات مسجلة.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-right text-sm">
-              <thead className="bg-mist/70">
-                <tr>
-                  <th className="px-4 py-3">الطالب</th>
-                  <th className="px-4 py-3">التاريخ</th>
-                  <th className="px-4 py-3">الحسم</th>
-                  <th className="px-4 py-3">السبب</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {deductions.map((transaction) => {
-                  const student = students.find((item) => String(item.id) === String(transaction.studentId));
-                  return (
-                    <tr key={String(transaction.id)}>
-                      <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{student ? getStudentName(student) : formatValue(transaction.studentId)}</td>
-                      <td className="whitespace-nowrap px-4 py-3">{formatValue(transaction.transactionDate)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 font-bold text-red-700">{Math.abs(getNumberValue(transaction.amount))} نقطة</td>
-                      <td className="px-4 py-3 text-slate-600">{formatValue(transaction.reason)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -3681,7 +3589,7 @@ function AttendanceWorkspace({
   onMarkAttendance: (
     studentId: CrudValue,
     sessionId: CrudValue,
-    status: "present" | "late" | "absent",
+    status: "present" | "late",
     existingRecord?: CrudRow,
   ) => Promise<void>;
   onNavigateRecord: (row: CrudRow, mode: "detail" | "edit") => void;
@@ -3818,7 +3726,7 @@ function AttendanceWorkspace({
   async function handleMark(
     studentId: CrudValue,
     sessionId: CrudValue,
-    status: "present" | "late" | "absent",
+    status: "present" | "late",
     existingRecord?: CrudRow,
   ) {
     const key = `${studentId}-${sessionId}-${status}`;
@@ -4354,8 +4262,8 @@ function AttendanceWorkspace({
                       </span>
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 sm:w-80">
-                    {(["present", "late", "absent"] as const).map((status) => {
+                  <div className="grid grid-cols-2 gap-2 sm:w-56">
+                    {(["present", "late"] as const).map((status) => {
                       const isSelected = currentStatus === status;
                       const key = `${student.id}-${selectedSession?.id}-${status}`;
 
@@ -4379,10 +4287,8 @@ function AttendanceWorkspace({
                             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                           ) : status === "present" ? (
                             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                          ) : status === "late" ? (
-                            <Clock3 className="h-4 w-4" aria-hidden="true" />
                           ) : (
-                            <XCircle className="h-4 w-4" aria-hidden="true" />
+                            <Clock3 className="h-4 w-4" aria-hidden="true" />
                           )}
                           <span>{getStatusLabel(status)}</span>
                         </button>
@@ -5057,7 +4963,7 @@ export function CrudDashboard({
   attendanceTaking = false,
   quickWizard = false,
   manualPoints = false,
-  deductions = false,
+  pointTransactionMode,
   studentPhones = false,
   mode,
   rowId,
@@ -5072,7 +4978,7 @@ export function CrudDashboard({
   attendanceTaking?: boolean;
   quickWizard?: boolean;
   manualPoints?: boolean;
-  deductions?: boolean;
+  pointTransactionMode?: "additions" | "deductions";
   studentPhones?: boolean;
   mode: ViewMode;
   rowId?: string;
@@ -5367,7 +5273,7 @@ export function CrudDashboard({
   async function handleMarkAttendance(
     studentId: CrudValue,
     sessionId: CrudValue,
-    status: "present" | "late" | "absent",
+    status: "present" | "late",
     existingRecord?: CrudRow,
   ) {
     if (existingRecord?.id !== undefined && existingRecord.id !== null) {
@@ -5535,10 +5441,22 @@ export function CrudDashboard({
             search: {},
           });
         }}
-        onSelectDeductions={() => {
+        onSelectPointAdditions={() => {
           void navigate({
             to: dashboardPath({
               courseSlug: activeCourse.slug,
+              cohortTag: activeCohort?.tag,
+              entity: "points",
+              subpage: "additions",
+            }),
+            search: {},
+          });
+        }}
+        onSelectPointDeductions={() => {
+          void navigate({
+            to: dashboardPath({
+              courseSlug: activeCourse.slug,
+              cohortTag: activeCohort?.tag,
               entity: "points",
               subpage: "deductions",
             }),
@@ -5557,7 +5475,7 @@ export function CrudDashboard({
           });
         }}
         showAttendanceChartsActive={attendanceCharts}
-        showDeductionsActive={deductions}
+        pointTransactionMode={pointTransactionMode}
         showStudentPhonesActive={studentPhones}
       />
 
@@ -5569,11 +5487,12 @@ export function CrudDashboard({
           </p>
         ) : null}
 
-        {activeEntityKey === "points" && manualPoints ? (
-          <ManualPointsPage
+        {activeEntityKey === "points" && (manualPoints || pointTransactionMode) ? (
+          <PointTransactionsPage
             activeCourse={activeCourse}
             activeSchema={activeSchema}
             entityDefinitions={entityDefinitions}
+            mode={pointTransactionMode ?? "additions"}
             onBack={() =>
               void navigate({
                 to: dashboardPath({
@@ -5589,26 +5508,27 @@ export function CrudDashboard({
           />
         ) : null}
 
-        {activeEntityKey === "points" && deductions ? (
-          <DeductionsPage
-            activeCourse={activeCourse}
-            activeSchema={activeSchema}
-            entityDefinitions={entityDefinitions}
-            onCreated={invalidateDashboardQueries}
-            relationOptions={relationOptions}
-          />
-        ) : null}
-
-        {activeEntityKey === "points" && !manualPoints && !deductions ? (
+        {activeEntityKey === "points" && !manualPoints && !pointTransactionMode ? (
           <PointsWorkspace
             activeSchema={activeSchema}
-            onOpenManualPoints={() =>
+            onOpenAdditions={() =>
               void navigate({
                 to: dashboardPath({
                   courseSlug: activeCourse.slug,
-        cohortTag: activeCohort?.tag,
+                  cohortTag: activeCohort?.tag,
                   entity: "points",
-                  subpage: "manual",
+                  subpage: "additions",
+                }),
+                search: {},
+              })
+            }
+            onOpenDeductions={() =>
+              void navigate({
+                to: dashboardPath({
+                  courseSlug: activeCourse.slug,
+                  cohortTag: activeCohort?.tag,
+                  entity: "points",
+                  subpage: "deductions",
                 }),
                 search: {},
               })

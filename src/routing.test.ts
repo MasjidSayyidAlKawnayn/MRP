@@ -26,16 +26,18 @@ describe("routing helpers", () => {
       dashboardPath({
         courseSlug: "default",
         entity: "points",
-        subpage: "manual",
+        subpage: "additions",
       }),
-    ).toBe("/courses/default/dashboard/points/manual");
+    ).toBe("/courses/default/dashboard/points/additions");
+
     expect(
       dashboardPath({
+        cohortTag: "summer2026",
         courseSlug: "default",
         entity: "points",
         subpage: "deductions",
       }),
-    ).toBe("/courses/default/dashboard/points/deductions");
+    ).toBe("/courses/default/cohorts/summer2026/dashboard/points/deductions");
 
     expect(
       dashboardPath({
@@ -52,8 +54,11 @@ describe("routing helpers", () => {
 
     expect(routesByPath).toContain("/courses/$courseSlug/dashboard/$entity");
     expect(routesByPath).toContain("/courses/$courseSlug/dashboard/attendanceRecords/take");
-    expect(routesByPath).toContain("/courses/$courseSlug/dashboard/points/manual");
+    expect(routesByPath).toContain("/courses/$courseSlug/dashboard/points/additions");
     expect(routesByPath).toContain("/courses/$courseSlug/dashboard/points/deductions");
+    expect(routesByPath).toContain(
+      "/courses/$courseSlug/cohorts/$cohortTag/dashboard/points/additions",
+    );
     expect(routesByPath).toContain(
       "/courses/$courseSlug/cohorts/$cohortTag/dashboard/students/phones",
     );

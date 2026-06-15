@@ -16,11 +16,11 @@ export type WorkspaceRouteState = {
   attendanceWizard?: boolean;
   canonicalPath?: string;
   cohortTag?: string;
-  deductions?: boolean;
   entity: EntityKey;
   manualPoints?: boolean;
   mode: ViewMode;
   page: WorkspacePage;
+  pointTransactionMode?: "additions" | "deductions";
   rowId?: string;
   studentPhones?: boolean;
   courseSlug: string;
@@ -277,6 +277,50 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
     };
   }
 
+  const cohortPointAdditions = matchRoute({
+    to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/points/additions",
+    fuzzy: false,
+  });
+  if (cohortPointAdditions) {
+    return {
+      canonicalPath: dashboardPath({
+        cohortTag: cohortPointAdditions.cohortTag,
+        courseSlug: cohortPointAdditions.courseSlug,
+        entity: "points",
+        subpage: "additions",
+      }),
+      cohortTag: cohortPointAdditions.cohortTag,
+      courseSlug: cohortPointAdditions.courseSlug,
+      entity: "points",
+      mode: "list",
+      page: "dashboard",
+      pointTransactionMode: "additions",
+      search,
+    };
+  }
+
+  const cohortPointDeductions = matchRoute({
+    to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/points/deductions",
+    fuzzy: false,
+  });
+  if (cohortPointDeductions) {
+    return {
+      canonicalPath: dashboardPath({
+        cohortTag: cohortPointDeductions.cohortTag,
+        courseSlug: cohortPointDeductions.courseSlug,
+        entity: "points",
+        subpage: "deductions",
+      }),
+      cohortTag: cohortPointDeductions.cohortTag,
+      courseSlug: cohortPointDeductions.courseSlug,
+      entity: "points",
+      mode: "list",
+      page: "dashboard",
+      pointTransactionMode: "deductions",
+      search,
+    };
+  }
+
   const cohortDashboardDetail = matchRoute({
     to: "/courses/$courseSlug/cohorts/$cohortTag/dashboard/$entity/$rowId",
     fuzzy: false,
@@ -338,26 +382,47 @@ export function useWorkspaceRouteState(): WorkspaceRouteState {
       manualPoints: true,
       mode: "list",
       page: "dashboard",
+      pointTransactionMode: "additions",
       search,
     };
   }
 
-  const deductions = matchRoute({
-    to: "/courses/$courseSlug/dashboard/points/deductions",
+  const pointAdditions = matchRoute({
+    to: "/courses/$courseSlug/dashboard/points/additions",
     fuzzy: false,
   });
-  if (deductions) {
+  if (pointAdditions) {
     return {
       canonicalPath: dashboardPath({
-        courseSlug: deductions.courseSlug,
+        courseSlug: pointAdditions.courseSlug,
         entity: "points",
-        subpage: "deductions",
+        subpage: "additions",
       }),
-      courseSlug: deductions.courseSlug,
-      deductions: true,
+      courseSlug: pointAdditions.courseSlug,
       entity: "points",
       mode: "list",
       page: "dashboard",
+      pointTransactionMode: "additions",
+      search,
+    };
+  }
+
+  const pointDeductions = matchRoute({
+    to: "/courses/$courseSlug/dashboard/points/deductions",
+    fuzzy: false,
+  });
+  if (pointDeductions) {
+    return {
+      canonicalPath: dashboardPath({
+        courseSlug: pointDeductions.courseSlug,
+        entity: "points",
+        subpage: "deductions",
+      }),
+      courseSlug: pointDeductions.courseSlug,
+      entity: "points",
+      mode: "list",
+      page: "dashboard",
+      pointTransactionMode: "deductions",
       search,
     };
   }
