@@ -9,8 +9,7 @@
         var hash = window.location.hash;
         var segments = path.split("/").filter(Boolean);
         var repo = segments.length ? "/" + segments[0] + "/" : "/";
-        var route = path.slice(repo.length - 1);
-        sessionStorage.setItem("mrp:redirect", route + search + hash);
+        sessionStorage.setItem("mrp:redirect", path + search + hash);
         window.location.replace(repo);
       })();
     </script>
