@@ -3573,6 +3573,7 @@ function AttendanceWorkspace({
   isLoading,
   isTakingPage,
   onMarkAttendance,
+  onCreateAttendanceSession,
   onNavigateRecord,
   onNavigateStudent,
   onOpenTakingPage,
@@ -3592,6 +3593,7 @@ function AttendanceWorkspace({
     status: "present" | "late",
     existingRecord?: CrudRow,
   ) => Promise<void>;
+  onCreateAttendanceSession: (values: Record<string, CrudValue>) => Promise<CrudRow | null>;
   onNavigateRecord: (row: CrudRow, mode: "detail" | "edit") => void;
   onNavigateStudent: (student: CrudRow) => void;
   onOpenTakingPage: () => void;
@@ -3606,6 +3608,11 @@ function AttendanceWorkspace({
   const [studentSearch, setStudentSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [rosterSearch, setRosterSearch] = useState("");
+  const [sessionSearch, setSessionSearch] = useState("");
+  const [newSessionDate, setNewSessionDate] = useState(getTodayDateString());
+  const [newSessionLabel, setNewSessionLabel] = useState("");
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<CrudValue | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<CrudValue | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<CrudValue | null>(null);
@@ -3651,6 +3658,9 @@ function AttendanceWorkspace({
     sessions.find((session) => String(session.id) === String(selectedSessionId)) ??
     getDefaultAttendanceSession(sessions) ??
     null;
+  const filteredSessions = searchRows(sessions, sessionSearch, (session) =>
+    [session.id, session.sessionDate, session.label, session.sequenceOnDate].join(" "),
+  );
 
   useEffect(() => {
     if (!selectedStudentId && students[0]?.id !== undefined) {
@@ -3736,6 +3746,44 @@ function AttendanceWorkspace({
       await onMarkAttendance(studentId, sessionId, status, existingRecord);
     } finally {
       setSavingKey(null);
+    }
+  }
+
+  async function handleCreateSession() {
+    setSessionError(null);
+
+    if (!newSessionDate) {
+      setSessionError("اختر تاريخ جلسة الحضور.");
+      return;
+    }
+
+    const sameDateSessions = sessions.filter(
+      (session) => String(session.sessionDate ?? "").slice(0, 10) === newSessionDate,
+    );
+    const nextSequence =
+      sameDateSessions.reduce((max, session) => {
+        const value = Number(session.sequenceOnDate ?? 0);
+        return Number.isFinite(value) ? Math.max(max, value) : max;
+      }, 0) + 1;
+
+    setIsCreatingSession(true);
+
+    try {
+      const created = await onCreateAttendanceSession({
+        sessionDate: newSessionDate,
+        label: newSessionLabel.trim() || newSessionDate,
+        sequenceOnDate: nextSequence,
+      });
+
+      if (created?.id !== undefined && created.id !== null) {
+        setSelectedSessionId(created.id);
+        setSessionSearch("");
+        setNewSessionLabel("");
+      }
+    } catch (error) {
+      setSessionError(error instanceof Error ? error.message : ui.createError);
+    } finally {
+      setIsCreatingSession(false);
     }
   }
 
@@ -4186,20 +4234,60 @@ function AttendanceWorkspace({
       {viewMode === "taking" ? (
         <div className="space-y-4 p-3 lg:p-4">
           <div className="grid min-w-0 gap-3 xl:grid-cols-3">
-            <label className="min-w-0 text-sm font-bold text-slate-700">
-              جلسة الحضور
-              <select
-                className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
-                onChange={(event) => setSelectedSessionId(event.target.value)}
-                value={String(selectedSession?.id ?? "")}
-              >
-                {sessions.map((session) => (
-                  <option key={String(session.id)} value={String(session.id)}>
-                    {getSessionTime(session)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="min-w-0 text-sm font-bold text-slate-700">
+              <span>جلسة الحضور</span>
+              <div className="mt-2 space-y-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+                <SearchInput
+                  onChange={setSessionSearch}
+                  onClear={() => setSessionSearch("")}
+                  placeholder="ابحث عن جلسة حضور"
+                  value={sessionSearch}
+                />
+                <select
+                  className="block w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                  onChange={(event) => setSelectedSessionId(event.target.value)}
+                  value={String(selectedSession?.id ?? "")}
+                >
+                  {filteredSessions.map((session) => (
+                    <option key={String(session.id)} value={String(session.id)}>
+                      {getSessionTime(session)}
+                      {session.label ? ` - ${formatValue(session.label)}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <input
+                    className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cedar/25"
+                    onChange={(event) => setNewSessionDate(event.target.value)}
+                    type="date"
+                    value={newSessionDate}
+                  />
+                  <input
+                    className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cedar/25"
+                    onChange={(event) => setNewSessionLabel(event.target.value)}
+                    placeholder="اسم اختياري"
+                    value={newSessionLabel}
+                  />
+                  <Button
+                    className="gap-2"
+                    disabled={isCreatingSession || isLoading}
+                    onClick={() => void handleCreateSession()}
+                    type="button"
+                  >
+                    {isCreatingSession ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    إنشاء
+                  </Button>
+                </div>
+                {sessionError ? <p className="text-xs text-amber-700">{sessionError}</p> : null}
+                {filteredSessions.length === 0 ? (
+                  <p className="text-xs text-slate-500">لا توجد جلسة حضور مطابقة.</p>
+                ) : null}
+              </div>
+            </div>
             <label className="min-w-0 text-sm font-bold text-slate-700">
               المجموعة
               <div className="mt-2 flex min-w-0 flex-wrap gap-2 overflow-hidden rounded-xl bg-slate-100 p-1">
@@ -4996,6 +5084,11 @@ export function CrudDashboard({
   const activeEntity =
     findEntityDefinition(activeEntityId, entityDefinitions) ??
     entityDefinitions[0];
+  const attendanceSessionsEntity = getEntityByKey(
+    entityDefinitions,
+    activeSchema,
+    "attendanceSessions",
+  );
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
   const [mutationError, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -5159,6 +5252,21 @@ export function CrudDashboard({
   const deleteRowMutation = useMutation({
     mutationFn: (id: number) =>
       softDeleteRow(activeEntity, id, activeCourse, activeCohort ?? undefined),
+    onSuccess: invalidateDashboardQueries,
+  });
+  const createAttendanceSessionMutation = useMutation({
+    mutationFn: (values: Record<string, CrudValue>) => {
+      if (!attendanceSessionsEntity) {
+        throw new Error("تعذر تحميل كيان جلسات الحضور.");
+      }
+
+      return createRow(
+        attendanceSessionsEntity,
+        values,
+        activeCourse,
+        activeCohort ?? undefined,
+      );
+    },
     onSuccess: invalidateDashboardQueries,
   });
 
@@ -5664,6 +5772,9 @@ export function CrudDashboard({
             isTakingPage={attendanceTaking}
             isLoading={isLoading}
             onMarkAttendance={handleMarkAttendance}
+            onCreateAttendanceSession={(values) =>
+              createAttendanceSessionMutation.mutateAsync(values)
+            }
             onNavigateRecord={(row, nextMode) =>
               navigateDashboard({
                 mode: nextMode,
