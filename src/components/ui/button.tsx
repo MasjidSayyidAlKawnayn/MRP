@@ -1,12 +1,14 @@
 import * as React from "react";
 import { cn } from "../../lib/utils";
 
-type ButtonVariant = "default" | "outline" | "secondary";
+type ButtonVariant = "default" | "destructive" | "outline" | "secondary";
 type ButtonSize = "default" | "sm" | "icon";
 
 const variantClasses: Record<ButtonVariant, string> = {
   default:
     "bg-cedar text-white shadow-lg shadow-cedar/20 hover:bg-palm disabled:hover:bg-cedar",
+  destructive:
+    "bg-rose-700 text-white shadow-lg shadow-rose-950/15 hover:bg-rose-800 disabled:hover:bg-rose-700",
   outline:
     "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50",
   secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200",

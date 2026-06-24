@@ -26,17 +26,15 @@ import {
   UsersRound,
   XCircle,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useAuth } from "../auth/AuthContext";
 import {
-  CourseCreatePage,
-  CourseDeletePage,
-  CourseDetailPage,
-  CourseEditPage,
-  CourseListPage,
-  CourseSettingsPage,
-  CrudDashboard,
-} from "./CrudDashboard";
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useAuth } from "../auth/AuthContext";
 import {
   appSchema,
   listCohorts,
@@ -66,6 +64,29 @@ import {
   useWorkspaceRouteState,
   type WorkspaceRouteState,
 } from "../features/routing/useWorkspaceRouteState";
+
+const loadCrudDashboard = () => import("./CrudDashboard");
+const CourseCreatePage = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CourseCreatePage })),
+);
+const CourseDeletePage = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CourseDeletePage })),
+);
+const CourseDetailPage = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CourseDetailPage })),
+);
+const CourseEditPage = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CourseEditPage })),
+);
+const CourseListPage = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CourseListPage })),
+);
+const CourseSettingsPage = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CourseSettingsPage })),
+);
+const CrudDashboard = lazy(() =>
+  loadCrudDashboard().then((module) => ({ default: module.CrudDashboard })),
+);
 
 const text = {
   loadingAccount: "\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u062D\u0633\u0627\u0628...",
@@ -585,7 +606,7 @@ export function AuthPanel({ appName }: { appName: string }) {
       <SignedOut>
         <section className="masjid-pattern -mx-4 min-h-[calc(100vh-2rem)] overflow-hidden px-4 py-4 sm:-mx-6 sm:px-6 sm:py-8 lg:-mx-8 lg:min-h-[calc(100vh-6rem)] lg:px-8">
           <div className="relative mx-auto grid min-h-[inherit] max-w-7xl items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(390px,430px)] lg:gap-14">
-            <div className="relative order-1 max-w-3xl lg:order-1">
+            <div className="relative order-2 max-w-3xl lg:order-1">
               <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-cedar/15 bg-white/70 px-3 py-2 text-xs font-bold text-cedar shadow-sm shadow-cedar/5 backdrop-blur sm:px-4 sm:text-sm">
                 <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span className="truncate">{appName}</span>
@@ -618,7 +639,7 @@ export function AuthPanel({ appName }: { appName: string }) {
               </div>
             </div>
 
-            <div className="relative order-2 lg:order-2">
+            <div className="relative order-1 lg:order-2">
               <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-cedar/15 via-white/55 to-saffron/15 blur-2xl" />
               <div className="login-auth-shell relative rounded-[1.75rem] border border-white/80 bg-white/88 p-4 shadow-2xl shadow-cedar/12 backdrop-blur-xl sm:p-5">
                 <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl bg-cedar px-4 py-3 text-white shadow-lg shadow-cedar/20">
@@ -667,15 +688,25 @@ export function AuthPanel({ appName }: { appName: string }) {
 
       <SignedIn>
         <section className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
-          <OnboardingProvider>
-            <SignedInWorkspace
-              key={sessionId ?? "signed-in"}
-              routeState={routeState}
-            />
-          </OnboardingProvider>
+          <Suspense fallback={<WorkspaceLoading />}>
+            <OnboardingProvider>
+              <SignedInWorkspace
+                key={sessionId ?? "signed-in"}
+                routeState={routeState}
+              />
+            </OnboardingProvider>
+          </Suspense>
         </section>
       </SignedIn>
     </>
+  );
+}
+
+function WorkspaceLoading() {
+  return (
+    <div className="rounded-3xl border border-white/70 bg-white/85 p-6 text-center shadow-xl shadow-cedar/5">
+      <p className="text-sm font-bold text-slate-600">{text.loadingAccount}</p>
+    </div>
   );
 }
 
@@ -873,6 +904,15 @@ function SignedInWorkspace({
         <p className="text-sm text-slate-600">{text.loadingAccount}</p>
       </div>
     );
+  }
+
+  if (
+    routeState.page === "dashboard" &&
+    Boolean(activeCourse) &&
+    Boolean(routeState.cohortTag) &&
+    cohortsQuery.isLoading
+  ) {
+    return <WorkspaceLoading />;
   }
 
   if (

@@ -16,6 +16,7 @@ import { HexAlphaColorPicker } from "react-colorful";
 import {
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
@@ -349,7 +350,7 @@ const ui = {
   noMatches: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0646\u062A\u0627\u0626\u062C \u062A\u0637\u0627\u0628\u0642 \u0627\u0644\u0628\u062D\u062B.",
   search: "\u0628\u062D\u062B",
   actions: "\u0627\u0644\u0625\u062C\u0631\u0627\u0621\u0627\u062A",
-  showing: "\u0627\u0644\u0645\u0639\u0631\u0648\u0636",
+  showing: "\u0627\u0644\u0646\u062a\u0627\u0626\u062c",
   from: "\u0645\u0646",
   createError: "\u062A\u0639\u0630\u0631 \u062D\u0641\u0638 \u0647\u0630\u0647 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A.",
   loadError: "\u062A\u0639\u0630\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A.",
@@ -748,14 +749,30 @@ function getDefaultAttendanceSession(sessions: CrudRow[]) {
   );
 }
 
+type AttendanceStatus = "present" | "late" | "absent";
+
 function getStatusLabel(status: CrudValue | undefined) {
-  return status === "late" ? "متأخر" : "حاضر";
+  if (status === "late") {
+    return "متأخر";
+  }
+
+  if (status === "absent") {
+    return "غائب";
+  }
+
+  return "حاضر";
 }
 
 function getStatusClasses(status: CrudValue | undefined) {
-  return status === "late"
-    ? "border-amber-200 bg-amber-50 text-amber-800"
-    : "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "late") {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+
+  if (status === "absent") {
+    return "border-rose-200 bg-rose-50 text-rose-800";
+  }
+
+  return "border-emerald-200 bg-emerald-50 text-emerald-800";
 }
 
 function getEntityByKey(
@@ -1015,11 +1032,13 @@ function compareTableValues(left: unknown, right: unknown) {
 }
 
 function SortableHeader({
+  accessibleLabel,
   canSort,
   label,
   onToggle,
   sorted,
 }: {
+  accessibleLabel: string;
   canSort: boolean;
   label: ReactNode;
   onToggle?: () => void;
@@ -1035,7 +1054,7 @@ function SortableHeader({
 
   return (
     <button
-      aria-label={`ترتيب ${String(label)}، ${directionLabel}`}
+      aria-label={`ترتيب ${accessibleLabel}، ${directionLabel}`}
       className="inline-flex w-full items-center gap-1 text-right transition hover:text-cedar focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cedar/40"
       onClick={onToggle}
       type="button"
@@ -2952,6 +2971,7 @@ function PointsWorkspace({
                   key={id}
                 >
                   <SortableHeader
+                    accessibleLabel={label}
                     canSort={sortable}
                     label={label}
                     onToggle={() => toggleLeaderboardSort(id)}
@@ -3590,7 +3610,7 @@ function AttendanceWorkspace({
   onMarkAttendance: (
     studentId: CrudValue,
     sessionId: CrudValue,
-    status: "present" | "late",
+    status: AttendanceStatus,
     existingRecord?: CrudRow,
   ) => Promise<void>;
   onCreateAttendanceSession: (values: Record<string, CrudValue>) => Promise<CrudRow | null>;
@@ -3736,7 +3756,7 @@ function AttendanceWorkspace({
   async function handleMark(
     studentId: CrudValue,
     sessionId: CrudValue,
-    status: "present" | "late",
+    status: AttendanceStatus,
     existingRecord?: CrudRow,
   ) {
     const key = `${studentId}-${sessionId}-${status}`;
@@ -4350,8 +4370,8 @@ function AttendanceWorkspace({
                       </span>
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:w-56">
-                    {(["present", "late"] as const).map((status) => {
+                  <div className="grid grid-cols-3 gap-2 sm:w-80">
+                    {(["present", "late", "absent"] as const).map((status) => {
                       const isSelected = currentStatus === status;
                       const key = `${student.id}-${selectedSession?.id}-${status}`;
 
@@ -4375,8 +4395,10 @@ function AttendanceWorkspace({
                             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                           ) : status === "present" ? (
                             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                          ) : (
+                          ) : status === "late" ? (
                             <Clock3 className="h-4 w-4" aria-hidden="true" />
+                          ) : (
+                            <X className="h-4 w-4" aria-hidden="true" />
                           )}
                           <span>{getStatusLabel(status)}</span>
                         </button>
@@ -5090,6 +5112,8 @@ export function CrudDashboard({
     "attendanceSessions",
   );
   const [selectedRow, setSelectedRow] = useState<CrudRow | null>(null);
+  const [rowPendingDelete, setRowPendingDelete] = useState<CrudRow | null>(null);
+  const [isDeletingRow, setIsDeletingRow] = useState(false);
   const [mutationError, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPagesTableHidden, setIsPagesTableHidden] = useState(false);
@@ -5286,13 +5310,6 @@ export function CrudDashboard({
         .filter((award) => groupedIds.includes(Number(award.memorizationPageId)))
         .map((award) => Number(award.id))
         .filter((id) => Number.isFinite(id));
-      const label = `${formatValue(row.page)} - ${formatValue(row.memorizedOn)}`;
-      const confirmed = window.confirm(`${ui.confirmDelete} ${label}؟ ${ui.hideRecord}`);
-
-      if (!confirmed) {
-        return;
-      }
-
       const awardsEntity = getEntityByKey(entityDefinitions, activeSchema, "pagePointAwards");
       if (awardsEntity) {
         await Promise.all(
@@ -5303,13 +5320,6 @@ export function CrudDashboard({
         groupedIds.map((id) => softDeleteRow(activeEntity, id, activeCourse, activeCohort ?? undefined)),
       );
       await invalidateDashboardQueries();
-      return;
-    }
-
-    const label = getRowLabel(activeEntity, row);
-    const confirmed = window.confirm(`${ui.confirmDelete} ${label}؟ ${ui.hideRecord}`);
-
-    if (!confirmed) {
       return;
     }
 
@@ -5329,6 +5339,20 @@ export function CrudDashboard({
       }),
       search: cleanSearch({ q: searchTerm }),
     });
+  }
+
+  async function confirmSoftDelete() {
+    if (!rowPendingDelete || isDeletingRow) {
+      return;
+    }
+
+    setIsDeletingRow(true);
+    try {
+      await handleSoftDelete(rowPendingDelete);
+      setRowPendingDelete(null);
+    } finally {
+      setIsDeletingRow(false);
+    }
   }
 
   const filteredRows = useMemo(() => {
@@ -5381,7 +5405,7 @@ export function CrudDashboard({
   async function handleMarkAttendance(
     studentId: CrudValue,
     sessionId: CrudValue,
-    status: "present" | "late",
+    status: AttendanceStatus,
     existingRecord?: CrudRow,
   ) {
     if (existingRecord?.id !== undefined && existingRecord.id !== null) {
@@ -5839,6 +5863,44 @@ export function CrudDashboard({
           />
         ) : null}
 
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open && !isDeletingRow) {
+              setRowPendingDelete(null);
+            }
+          }}
+          open={Boolean(rowPendingDelete)}
+        >
+          <DialogContent dir="rtl">
+            <DialogHeader>
+              <DialogTitle>{ui.confirmDelete}</DialogTitle>
+              <DialogDescription>
+                {rowPendingDelete
+                  ? `${getRowLabel(activeEntity, rowPendingDelete)}. ${ui.hideRecord}`
+                  : ui.hideRecord}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={isDeletingRow}
+                onClick={() => setRowPendingDelete(null)}
+                type="button"
+                variant="secondary"
+              >
+                {ui.cancel}
+              </Button>
+              <Button
+                disabled={isDeletingRow}
+                onClick={() => void confirmSoftDelete()}
+                type="button"
+                variant="destructive"
+              >
+                {isDeletingRow ? ui.saving : ui.delete}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {shouldShowRowsTable ? (
         <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-xl shadow-cedar/5">
           <div
@@ -5955,7 +6017,7 @@ export function CrudDashboard({
               activeEntityKey={activeEntityKey}
               activeSchema={activeSchema}
               entityDefinitions={entityDefinitions}
-              onDelete={(row) => void handleSoftDelete(row)}
+              onDelete={setRowPendingDelete}
               onEdit={(row) =>
                 navigateDashboard({
                   mode: "edit",
@@ -6133,21 +6195,23 @@ function CrudRowsTable({
         id: "actions",
         header: () => ui.actions,
         cell: ({ row }) => {
+          const rowLabel = getRowLabel(activeEntity, row.original);
+
           if (row.original.isGroupedPageRow) {
             return (
               <div className="flex gap-1">
-                <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => onDelete(row.original)} />
+                <ActionButton compact danger icon={Trash2} label={`${ui.delete} ${rowLabel}`} onClick={() => onDelete(row.original)} />
               </div>
             );
           }
 
           return (
             <div className="flex gap-1">
-              <ActionButton compact icon={Eye} label={ui.view} onClick={() => onView(row.original)} />
+              <ActionButton compact icon={Eye} label={`${ui.view} ${rowLabel}`} onClick={() => onView(row.original)} />
               {activeEntityKey !== "attendanceRecords" ? (
                 <>
-                  <ActionButton compact icon={Pencil} label={ui.edit} onClick={() => onEdit(row.original)} />
-                  <ActionButton compact danger icon={Trash2} label={ui.delete} onClick={() => onDelete(row.original)} />
+                  <ActionButton compact icon={Pencil} label={`${ui.edit} ${rowLabel}`} onClick={() => onEdit(row.original)} />
+                  <ActionButton compact danger icon={Trash2} label={`${ui.delete} ${rowLabel}`} onClick={() => onDelete(row.original)} />
                 </>
               ) : null}
             </div>
@@ -6173,7 +6237,14 @@ function CrudRowsTable({
     columns,
     data: rows,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    initialState: {
+      pagination: {
+        pageIndex: 0,
+        pageSize: 25,
+      },
+    },
     onSortingChange: setSorting,
     state: { sorting },
   });
@@ -6183,8 +6254,9 @@ function CrudRowsTable({
       : "w-max min-w-full table-auto";
 
   return (
-    <div className="overflow-x-auto">
-      <table className={`${tableLayoutClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
+    <div>
+      <div className="overflow-x-auto">
+        <table className={`${tableLayoutClass} divide-y divide-slate-200 text-right text-xs sm:text-sm`}>
         <thead className="bg-mist/70">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
@@ -6203,6 +6275,10 @@ function CrudRowsTable({
                     ? null
                     : (
                         <SortableHeader
+                          accessibleLabel={
+                            getField(activeEntity, header.column.id)?.label ??
+                            header.column.id
+                          }
                           canSort={header.column.getCanSort()}
                           label={flexRender(header.column.columnDef.header, header.getContext())}
                           onToggle={() => header.column.toggleSorting()}
@@ -6242,7 +6318,31 @@ function CrudRowsTable({
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
+      {table.getPageCount() > 1 ? (
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-3 py-3 text-sm">
+          <Button
+            disabled={!table.getCanPreviousPage()}
+            onClick={() => table.previousPage()}
+            type="button"
+            variant="secondary"
+          >
+            السابق
+          </Button>
+          <span className="font-bold text-slate-600">
+            الصفحة {table.getState().pagination.pageIndex + 1} من {table.getPageCount()}
+          </span>
+          <Button
+            disabled={!table.getCanNextPage()}
+            onClick={() => table.nextPage()}
+            type="button"
+            variant="secondary"
+          >
+            التالي
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

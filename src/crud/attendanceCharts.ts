@@ -1,26 +1,5 @@
-import JSZip from "jszip";
-import {
-  BarController,
-  BarElement,
-  CategoryScale,
-  Chart,
-  type ChartConfiguration,
-  Legend,
-  LinearScale,
-  Title,
-  Tooltip,
-} from "chart.js";
+import type { ChartConfiguration } from "chart.js";
 import type { CrudRow } from "./data";
-
-Chart.register(
-  CategoryScale,
-  LinearScale,
-  BarController,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-);
 
 export interface AttendanceChartData {
   groupId: string;
@@ -114,6 +93,26 @@ export async function renderAttendanceChartPngBlob(
   fromDate: string,
   toDate: string,
 ) {
+  const {
+    BarController,
+    BarElement,
+    CategoryScale,
+    Chart,
+    Legend,
+    LinearScale,
+    Title,
+    Tooltip,
+  } = await import("chart.js");
+  Chart.register(
+    CategoryScale,
+    LinearScale,
+    BarController,
+    BarElement,
+    Title,
+    Tooltip,
+    Legend,
+  );
+
   const width = 1200;
   const height = 720;
   const canvas = document.createElement("canvas");
@@ -232,6 +231,7 @@ export async function copyBlobToClipboard(blob: Blob) {
 }
 
 export async function buildZipBlob(files: Array<{ name: string; blob: Blob }>) {
+  const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   files.forEach((file) => {
     zip.file(file.name, file.blob);

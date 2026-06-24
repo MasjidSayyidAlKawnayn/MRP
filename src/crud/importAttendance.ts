@@ -1,4 +1,3 @@
-import JSZip from "jszip";
 import {
   createRow,
   createRows,
@@ -138,6 +137,7 @@ function getColumnIndex(cellRef: string) {
 }
 
 async function parseXlsx(file: File) {
+  const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const workbookXml = await zip.file("xl/workbook.xml")?.async("text");
   const workbookRelsXml = await zip
