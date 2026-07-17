@@ -1291,6 +1291,7 @@ const textareaClass =
 function EntityForm({
   entity,
   entityDefinitions,
+  excludedFieldKeys = [],
   mode,
   relationOptions,
   row,
@@ -1300,6 +1301,7 @@ function EntityForm({
 }: {
   entity: EntityDefinition;
   entityDefinitions: EntityDefinition[];
+  excludedFieldKeys?: readonly string[];
   mode: "create" | "edit";
   relationOptions: RelationOptions;
   row?: CrudRow;
@@ -1307,7 +1309,13 @@ function EntityForm({
   onCancel: () => void;
   onSubmit: (values: Record<string, CrudValue>) => Promise<void>;
 }) {
-  const fields = useMemo(() => getEditableFields(entity, mode), [entity, mode]);
+  const fields = useMemo(
+    () =>
+      getEditableFields(entity, mode).filter(
+        (field) => !excludedFieldKeys.includes(field.key),
+      ),
+    [entity, excludedFieldKeys, mode],
+  );
   const [values, setValues] = useState<Record<string, CrudValue>>(() =>
     Object.fromEntries(
       fields.map((field) => [
@@ -5697,6 +5705,9 @@ export function CrudDashboard({
             <EntityForm
               entity={activeEntity}
               entityDefinitions={entityDefinitions}
+              excludedFieldKeys={
+                activeCohort && activeEntityKey === "students" ? ["group"] : []
+              }
               draft={draft}
               key={`${activeEntity.id}:create`}
               mode="create"
